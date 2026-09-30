@@ -6,9 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import {
   useList, useSave, post, today, daysBetween, fmtShort, shortName, nowTime,
-  calcDoseMl, doseRuleText, calfProKids, calfProEnrolled, isCalfPro, weaned, CALF_PRO, CALF_PRO_AGE, goatName, regName } from "@/lib/herd";
+  calcDoseMl, doseRuleText, saveDoseWeights, weightChanged, calfProKids, calfProEnrolled, isCalfPro, weaned, CALF_PRO, CALF_PRO_AGE, goatName, regName } from "@/lib/herd";
 
 /** Kid program: Calf-Pro once a day from 4 days old until weaned, weighed every week */
 export function CalfProSection({ onGiven }: { onGiven?: () => void } = {}) {
@@ -22,6 +23,7 @@ export function CalfProSection({ onGiven }: { onGiven?: () => void } = {}) {
   const saveCare = useSave("care");
   const [picked, setPicked] = useState<Set<number> | null>(null);
   const [wVals, setWVals] = useState<Record<number, string>>({});
+  const [checking, setChecking] = useState(false); // weight check before dosing
   const [busy, setBusy] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
 
@@ -38,14 +40,24 @@ export function CalfProSection({ onGiven }: { onGiven?: () => void } = {}) {
   const young = animals.filter((a) => a.status === "active" && a.dob && a.dob <= t && daysBetween(a.dob, t) <= 120 && !calfProEnrolled(a, care) && !weaned(a.id, care) && a.calfPro !== 0)
     .sort((x, y) => y.dob!.localeCompare(x.dob!));
 
-  const give = async () => {
+  // Weight each dose is worked out from: a weight typed in the row, or the newest one on file
+  const useLbs = (k: typeof kids[number]) => (Number(wVals[k.animal.id]) > 0 ? Number(wVals[k.animal.id]) : k.lastWeight?.lbs);
+  const give = () => {
     if (!chosen.length) return toast({ title: "Pick at least one kid", variant: "destructive" });
+    const none = chosen.filter((k) => !useLbs(k));
+    if (hasDose && none.length) return toast({ title: `Weigh ${none.length} kid${none.length === 1 ? "" : "s"} first`, description: `${none.map((k) => goatName(k.animal)).join(", ")}: type a weight in the row to work out the dose.`, variant: "destructive" });
+    setChecking(true); // confirm the weights before logging
+  };
+  const logGive = async () => {
+    setChecking(false);
     setBusy(true);
     try {
+      await saveDoseWeights(chosen.map((k) => ({ animalId: k.animal.id, lbs: wVals[k.animal.id], date: t })), weights);
+      setWVals((p) => { const n = { ...p }; for (const k of chosen) delete n[k.animal.id]; return n; });
       const time = nowTime();
       await post("/api/treatments/batch", chosen.map((k) => ({
         animalId: k.animal.id, medicationId: med?.id ?? null, medName: med?.name ?? CALF_PRO, date: t, time,
-        doseMl: doseFor(k.lastWeight?.lbs), weightLbs: k.lastWeight?.lbs ?? null, route: med?.route ?? "Oral", reason: "Kid program (daily until weaned)",
+        doseMl: doseFor(useLbs(k)), weightLbs: useLbs(k) ?? null, route: med?.route ?? "Oral", reason: "Kid program (daily until weaned)",
         milkClearDate: t, meatClearDate: t,
       })));
       setPicked(null);
@@ -111,7 +123,7 @@ export function CalfProSection({ onGiven }: { onGiven?: () => void } = {}) {
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {k.lastWeight ? `${k.lastWeight.lbs} lb on ${fmtShort(k.lastWeight.date)}` : "No weight yet"}
-                    {hasDose && (k.lastWeight ? <span className="font-semibold text-foreground"> · dose {doseFor(k.lastWeight.lbs)} mL</span> : " · weigh for dose")}
+                    {hasDose && (useLbs(k) ? <span className="font-semibold text-foreground"> · dose {doseFor(useLbs(k))} mL{weightChanged(wVals[k.animal.id], k.lastWeight) ? ` (new ${useLbs(k)} lb)` : ""}</span> : " · weigh for dose")}
                     {k.weighDue ? <span className="font-semibold text-primary"> · weigh today</span> : ` · next weigh ${fmtShort(k.weighDate)}`}
                   </div>
                 </div>
@@ -157,6 +169,28 @@ export function CalfProSection({ onGiven }: { onGiven?: () => void } = {}) {
           )}
         </div>
       )}
+      <AlertDialog open={checking} onOpenChange={setChecking}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Check weights before dosing</AlertDialogTitle>
+            <AlertDialogDescription>The Calf-Pro dose goes by weight. Make sure each weight is right, or cancel and type today's weight in the kid's row.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <ul className="max-h-64 divide-y overflow-y-auto rounded-md border text-sm" data-testid="list-calfpro-check">
+            {chosen.map((k) => { const typed = weightChanged(wVals[k.animal.id], k.lastWeight); const old = !typed && k.weighDue; return (
+              <li key={k.animal.id} className="flex items-center justify-between gap-3 px-3 py-1.5">
+                <span className="min-w-0 truncate font-medium">{goatName(k.animal)}</span>
+                <span className={`shrink-0 text-right text-xs ${old ? "font-semibold text-amber-800 dark:text-amber-200" : "text-muted-foreground"}`}>
+                  {useLbs(k)} lb {typed ? "· new, will be saved" : k.lastWeight ? `· weighed ${fmtShort(k.lastWeight.date)}${old ? " · weigh-in due" : ""}` : ""}{hasDose ? <b className="ml-1 text-foreground">{doseFor(useLbs(k))} mL</b> : null}
+                </span>
+              </li>
+            ); })}
+          </ul>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Update weights</AlertDialogCancel>
+            <AlertDialogAction onClick={logGive} data-testid="button-confirm-calfpro">Weights are right, give</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 }

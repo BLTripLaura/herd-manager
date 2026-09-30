@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { weightOk } from "@/components/weight-check";
 import { Search, Syringe, Scale, Milk as MilkIcon, MoveRight, Check, X, AlertTriangle, ClipboardCheck } from "lucide-react";
 import { BatchCare } from "@/components/batch-care";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { PageHeader, useApp } from "@/components/shell";
 import { Field, Pick, RepeatFields, repeatPlan, MedPick } from "@/components/forms";
 import { useBarnHours } from "@/components/barn-hours";
-import { useList, post, today, addDays, tempNote, calcDoseMl, latestWeight, matchesAnimal, shortName, doseRuleText, invalidateAll, fmtDate , nowTime, type RepeatUnit, goatName, regName, isDrops, pillUnitOf, ORAL_UNITS, hasSide, SIDES, TUBE_AMOUNTS } from "@/lib/herd";
+import { useList, post, today, addDays, tempNote, calcDoseMl, fmtShort, latestWeight, isWeightDosed, saveDoseWeights, weightChanged, matchesAnimal, shortName, doseRuleText, invalidateAll, fmtDate , nowTime, type RepeatUnit, goatName, regName, isDrops, pillUnitOf, ORAL_UNITS, hasSide, SIDES, TUBE_AMOUNTS } from "@/lib/herd";
 import { errText } from "@/pages/milk";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
@@ -38,7 +39,7 @@ export default function Batch() {
   const [tDate, setTDate] = useState(today());
   const [reason, setReason] = useState("");
   const [givenBy, setGivenBy] = useState("");
-  const [rows, setRows] = useState<Record<number, { w: string; dose: string; skip?: boolean; temp?: string }>>({});
+  const [rows, setRows] = useState<Record<number, { w: string; dose: string; skip?: boolean; temp?: string; typed?: boolean; ok?: boolean }>>({});
   const med = meds.find((m) => String(m.id) === medId);
   const oral = med?.route === "Oral" && !isDrops(med);
   const [bUnit, setBUnit] = useState("mL");
@@ -62,19 +63,24 @@ export default function Batch() {
     setRows((prev) => {
       const next: typeof prev = {};
       for (const a of chosen) {
-        const w = prev[a.id]?.w ?? String(latestWeight(a.id, weights)?.lbs ?? "");
-        next[a.id] = { w, dose: String(calcDoseMl(med, Number(w)) ?? ""), skip: prev[a.id]?.skip, temp: prev[a.id]?.temp };
+        // Typed weights stay; otherwise always use the newest weight on file
+        const typed = prev[a.id]?.typed;
+        const w = typed ? prev[a.id].w : String(latestWeight(a.id, weights)?.lbs ?? "");
+        const same = typed || prev[a.id]?.w === w;
+        next[a.id] = { w, dose: String(calcDoseMl(med, Number(w)) ?? ""), skip: prev[a.id]?.skip, temp: prev[a.id]?.temp, typed, ok: same ? prev[a.id]?.ok : false };
       }
       return next;
     });
-  }, [medId, selected.join(","), weights.length]); // eslint-disable-line
-  const setRow = (id: number, patch: Partial<{ w: string; dose: string; skip: boolean; temp: string }>) =>
+  }, [medId, selected.join(","), weights.map((w) => w.id).join(",")]); // eslint-disable-line
+  const setRow = (id: number, patch: Partial<{ w: string; dose: string; skip: boolean; temp: string; ok: boolean }>) =>
     setRows((p) => {
       const r = { ...p[id], ...patch };
-      if (patch.w !== undefined) r.dose = String(calcDoseMl(med, Number(patch.w)) ?? "");
+      if (patch.w !== undefined) { r.dose = String(calcDoseMl(med, Number(patch.w)) ?? ""); r.typed = true; r.ok = false; }
       return { ...p, [id]: r };
     });
   const treatRows = chosen.filter((a) => !rows[a.id]?.skip);
+  const byWeight = isWeightDosed(med);
+  const unchecked = byWeight ? treatRows.filter((a) => !weightOk(rows[a.id]?.w, latestWeight(a.id, weights), !!rows[a.id]?.ok)) : [];
   const totalMl = udder ? treatRows.length * (Number(bTubes) || 1) * (bSide === "Both" ? 2 : 1) : treatRows.reduce((s, a) => s + (Number(rows[a.id]?.dose) || 0), 0);
 
   const saveTreatments = async () => {
@@ -83,9 +89,11 @@ export default function Batch() {
     const times = Math.max(0, Math.floor(Number(rTimes) || 0));
     const every = Math.floor(Number(rEvery) || 0);
     if (times > 0 && every < 1) return toast({ title: "Enter the time between doses", variant: "destructive" });
+    if (unchecked.length) return toast({ title: `Check ${unchecked.length} weight${unchecked.length === 1 ? "" : "s"} first`, description: `${unchecked.slice(0, 4).map((a) => goatName(a)).join(", ")}${unchecked.length > 4 ? "…" : ""}: tap the check to confirm the weight on file, or type today's weight.`, variant: "destructive" });
     setBusy(true);
     const batchId = `B-${Date.now()}`;
     try {
+      await saveDoseWeights(treatRows.map((a) => ({ animalId: a.id, lbs: rows[a.id]?.w, date: tDate })), weights);
       await post("/api/treatments/batch", { repeat: times > 0 ? { times, every, unit: rUnit, at: rUnit === "hours" ? repeatPlan(tDate, String(times), String(every), rUnit, tTime, barnOn ? barnHours : null).slice(1) : undefined } : undefined, treatments: treatRows.map((a) => ({
         animalId: a.id, medicationId: med.id, medName: med.name, date: tDate, time: tTime || null,
         weightLbs: Number(rows[a.id]?.w) || null, tempF: Number(rows[a.id]?.temp) || null, side: sided ? bSide : null, ...(udder ? { doseMl: null, pillCount: Number(bTubes) || 1, pillUnit: "tube" } : isDrops(med) ? { doseMl: null, drops: Math.round(Number(rows[a.id]?.dose)) || null } : pillU ? { doseMl: null, pillCount: Number(rows[a.id]?.dose) || null, pillUnit: pillU } : { doseMl: Number(rows[a.id]?.dose) || null }), route: med.route,
@@ -220,16 +228,32 @@ export default function Batch() {
               </div>
               {chosen.length > 0 && (
                 <div className="overflow-hidden rounded-lg border bg-card">
+                  {byWeight && (
+                    <div className={cn("flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2 text-xs", unchecked.length ? "bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200" : "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200")} data-testid="bar-batch-weights">
+                      <span className="flex items-center gap-1.5 font-medium"><Scale className="h-3.5 w-3.5" />{unchecked.length ? `This dose goes by weight. Check ${unchecked.length} weight${unchecked.length === 1 ? "" : "s"}: tap ✓ if the weight on file is right, or type today's weight.` : "All weights checked. New weights will be saved to each goat."}</span>
+                      {unchecked.length > 0 && unchecked.some((a) => latestWeight(a.id, weights)) && (
+                        <Button size="sm" variant="outline" className="h-7 bg-background text-xs" onClick={() => setRows((p) => { const n = { ...p }; for (const a of unchecked) if (latestWeight(a.id, weights) && !weightChanged(n[a.id]?.w, latestWeight(a.id, weights))) n[a.id] = { ...n[a.id], ok: true }; return n; })} data-testid="button-batch-confirm-all">I checked them: all correct</Button>
+                      )}
+                    </div>
+                  )}
                   <div className="grid grid-cols-[1fr_auto_auto_auto_auto] items-center gap-2 border-b bg-muted/50 px-3 py-2 text-xs font-semibold text-muted-foreground sm:gap-3">
                     <span>Animal</span><span className="w-16 text-right sm:w-20">Temp °F</span><span className="w-16 text-right sm:w-24">Weight lb</span><span className="w-16 text-right sm:w-24">{udder ? "Tubes/side" : isDrops(med) ? "Drops" : pillU ? (pillU === "capsule" ? "Capsules" : "Tablets") : "Dose mL"}</span><span className="w-8" />
                   </div>
                   {chosen.map((a) => {
                     const r = rows[a.id] ?? { w: "", dose: "" };
+                    const lw = latestWeight(a.id, weights);
+                    const ok = weightOk(r.w, lw, !!r.ok);
+                    const changed = weightChanged(r.w, lw);
                     return (
                       <div key={a.id} className={cn("grid grid-cols-[1fr_auto_auto_auto_auto] items-center gap-2 border-b px-3 py-2 last:border-b-0 sm:gap-3", r.skip && "opacity-40")} data-testid={`row-batch-treat-${a.id}`}>
-                        <div className="min-w-0"><div className="truncate text-sm font-medium">{goatName(a)}</div><div className="text-xs text-muted-foreground">#{a.tag}{!r.w && " · no weight"}</div></div>
+                        <div className="min-w-0"><div className="truncate text-sm font-medium">{goatName(a)}</div><div className="text-xs text-muted-foreground">#{a.tag} · {lw ? `${lw.lbs} lb on ${fmtShort(lw.date)}` : "no weight on file"}</div>
+                          {byWeight && !r.skip && (changed
+                            ? <div className="text-xs font-medium text-emerald-700 dark:text-emerald-300">New weight, will be saved</div>
+                            : lw ? <button type="button" onClick={() => setRow(a.id, { ok: !r.ok })} className={cn("mt-0.5 inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs font-medium", ok ? "border-emerald-500/60 text-emerald-700 dark:text-emerald-300" : "border-amber-400 text-amber-800 dark:text-amber-200")} data-testid={`button-batch-wok-${a.id}`}>{ok ? <><Check className="h-3 w-3" />Weight checked</> : "Tap to confirm weight"}</button>
+                            : <div className="text-xs font-medium text-amber-800 dark:text-amber-200">Enter weight</div>)}
+                        </div>
                         <Input className={cn(tInput, "sm:w-20", tempNote(r.temp)?.tone === "high" && "border-destructive text-destructive", tempNote(r.temp)?.tone === "low" && "border-sky-500")} inputMode="decimal" placeholder="opt." aria-label={`Temperature for ${a.name} (optional)`} value={r.temp ?? ""} onChange={(e) => setRow(a.id, { temp: e.target.value })} disabled={r.skip} data-testid={`input-batch-temp-${a.id}`} />
-                        <Input className={tInput} inputMode="decimal" value={r.w} onChange={(e) => setRow(a.id, { w: e.target.value })} disabled={r.skip} data-testid={`input-batch-weight-${a.id}`} />
+                        <Input className={cn(tInput, byWeight && !r.skip && (ok ? "border-emerald-500/60" : "border-amber-400"))} inputMode="decimal" value={r.w} onChange={(e) => setRow(a.id, { w: e.target.value })} disabled={r.skip} data-testid={`input-batch-weight-${a.id}`} />
                         <Input className={cn(tInput, "font-semibold")} inputMode="decimal" value={udder ? (bTubes === "0.5" ? "½" : bTubes) : r.dose} onChange={(e) => setRow(a.id, { dose: e.target.value })} disabled={r.skip || udder} data-testid={`input-batch-dose-${a.id}`} />
                         <Button variant="ghost" size="icon" aria-label={r.skip ? "Include" : "Skip"} onClick={() => setRow(a.id, { skip: !r.skip })}>{r.skip ? <Check /> : <X />}</Button>
                       </div>

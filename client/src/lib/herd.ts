@@ -96,8 +96,23 @@ export function age(dob?: string | null) {
 }
 
 /* ---------- weights & dosing ---------- */
+/** The goat's most recent weight: newest date, and the last one entered when two share a date */
 export function latestWeight(animalId: number, weights: Weight[] = []) {
-  return weights.filter((w) => w.animalId === animalId).sort((a, b) => b.date.localeCompare(a.date))[0];
+  return weights.filter((w) => w.animalId === animalId).sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id)[0];
+}
+/** Doses worked out from body weight (these need a checked weight before they're given) */
+export const WEIGHT_DOSE_UNITS = ["mg/lb", "mg/kg", "mL/100lb", "mL/25lb", "mL/lb"];
+export const isWeightDosed = (m?: { doseUnit?: string | null } | null) => !!m && WEIGHT_DOSE_UNITS.includes(m.doseUnit ?? "");
+/** "85 lb · weighed Sep 12 (18 days ago)" */
+export const weighedText = (w?: Weight) => (w ? `${w.lbs} lb · weighed ${fmtShort(w.date)} (${relDays(w.date)})` : "No weight on file");
+/** A typed weight that isn't the one on file: save it so every later dose uses it */
+export const weightChanged = (lbs: any, lw?: Weight) => Number(lbs) > 0 && (!lw || Math.abs(Number(lbs) - lw.lbs) > 0.001);
+/** Save new weights entered while dosing (only the ones that differ from what's on file) */
+export async function saveDoseWeights(list: { animalId: number; lbs: any; date: string }[], weights: Weight[]) {
+  const rows = list.filter((r) => weightChanged(r.lbs, latestWeight(r.animalId, weights)))
+    .map((r) => ({ animalId: r.animalId, date: r.date, lbs: Math.round(Number(r.lbs) * 10) / 10, method: "at treatment" }));
+  if (rows.length) await post("/api/weights/bulk", rows);
+  return rows.length;
 }
 
 export const DOSE_UNITS = [

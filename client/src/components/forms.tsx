@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { WeightCheck, weightOk } from "@/components/weight-check";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -10,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useBarnHours } from "@/components/barn-hours";
 import {
-  useList, useSave, post, today, addDays, calcDoseMl, latestWeight, DOSE_UNITS, GESTATION_DAYS, shortName, doseSchedule, dosesInDays, fmtShort, fmtTime, nowTime, repeatText, type RepeatUnit, type BarnHours,
+  useList, useSave, post, today, addDays, calcDoseMl, latestWeight, isWeightDosed, saveDoseWeights, DOSE_UNITS, GESTATION_DAYS, shortName, doseSchedule, dosesInDays, fmtShort, fmtTime, nowTime, repeatText, type RepeatUnit, type BarnHours,
   type Animal, type Medication, type Breeding, type OutsideBuck, type Heat, HEAT_SIGNS, doseRuleText, heatDates, heatInterval, useRemove, fmtDate, ULTRASOUND_DAYS, PREKID_DAYS, RECHECK_DAYS, usDue, US_LABEL, goatName, regName, matchesAnimal, idMatch, isDrops, pillUnitOf, ORAL_UNITS, hasSide, SIDES, TUBE_AMOUNTS } from "@/lib/herd";
 import { ExternalLink, Plus, ChevronsUpDown } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -467,8 +468,13 @@ export function TreatDialog({ open, onOpenChange, animal: fixed }: { open: boole
   const animal = fixed ?? animals.find((a) => String(a.id) === pickId);
   const lw = animal ? latestWeight(animal.id, weights) : undefined;
   const [v, set, setV] = useFormState<any>({ date: today(), weightLbs: lw?.lbs ?? "", givenBy: "", reason: "", times: "0", every: "", unit: "days", time: nowTime(), barnOn: false }, open);
+  // The weight must be confirmed (or a new one typed) before a weight-based dose is saved
+  const [wOk, setWOk] = useState(false);
+  const [wTyped, setWTyped] = useState(false);
+  useEffect(() => { if (open) { setWOk(false); setWTyped(false); } }, [open, animal?.id]);
+  // A newer weight on file (just weighed, or it finished loading) replaces the one shown, unless one was typed in
+  useEffect(() => { if (open && animal && !wTyped) { setV((p: any) => ({ ...p, weightLbs: lw?.lbs ?? "" })); setWOk(false); } }, [lw?.id, animal?.id, open]); // eslint-disable-line
   const { hours: barnHours } = useBarnHours();
-  useEffect(() => { if (!fixed && animal) setV((p: any) => ({ ...p, weightLbs: lw?.lbs ?? "" })); }, [pickId]); // eslint-disable-line
   const medsBefore = useRef<number[]>([]);
   useEffect(() => {
     // after adding a new medication, select it automatically
@@ -494,10 +500,12 @@ export function TreatDialog({ open, onOpenChange, animal: fixed }: { open: boole
     const times = Math.max(0, Math.floor(Number(v.times) || 0));
     const every = Math.floor(Number(v.every) || 0);
     if (times > 0 && every < 1) return toast({ title: "Enter the time between doses", variant: "destructive" });
+    if (isWeightDosed(med) && !weightOk(v.weightLbs, lw, wOk)) return toast({ title: "Check the weight first", description: lw ? `Tap Still correct if ${lw.lbs} lb is right, or type today's weight.` : "Enter the goat's weight to work out the dose.", variant: "destructive" });
     const unit: RepeatUnit = v.unit === "hours" ? "hours" : "days";
     const plan = repeatPlan(v.date, String(times), String(every), unit, v.time, v.barnOn ? barnHours : null).slice(1);
     setSaving(true);
     try {
+      const newW = await saveDoseWeights([{ animalId: animal.id, lbs: v.weightLbs, date: v.date }], weights);
       await post("/api/treatments/batch", {
         treatments: [{
           animalId: animal.id, medicationId: med.id, medName: med.name, date: v.date, time: v.time || null, weightLbs: num(v.weightLbs), tempF: num(v.tempF),
@@ -509,7 +517,7 @@ export function TreatDialog({ open, onOpenChange, animal: fixed }: { open: boole
         }],
         repeat: times > 0 ? { times, every, unit, at: unit === "hours" ? plan : undefined } : undefined,
       });
-      toast({ title: "Treatment logged", description: `${goatName(animal)} · ${med.name}${times ? ` · ${times} repeat${times > 1 ? "s" : ""} scheduled` : ""}` });
+      toast({ title: "Treatment logged", description: `${goatName(animal)} · ${med.name}${times ? ` · ${times} repeat${times > 1 ? "s" : ""} scheduled` : ""}${newW ? ` · new weight ${v.weightLbs} lb saved` : ""}` });
       onOpenChange(false);
     } finally { setSaving(false); }
   };
@@ -531,7 +539,7 @@ export function TreatDialog({ open, onOpenChange, animal: fixed }: { open: boole
           </Field>
           <Field label="Date"><Input type="date" value={v.date} onChange={(e) => set("date")(e.target.value)} /></Field>
           <Field label="Time given"><Input type="time" value={v.time ?? ""} onChange={(e) => set("time")(e.target.value)} data-testid="input-treat-time" /></Field>
-          <Field label="Weight (lb)" hint={lw ? `Last: ${lw.lbs} lb` : "No weight on file"}><Input type="number" inputMode="decimal" value={v.weightLbs} onChange={(e) => set("weightLbs")(e.target.value)} data-testid="input-treat-weight" /></Field>
+          {animal && <div className="col-span-2"><WeightCheck lbs={v.weightLbs} onLbs={(x) => { setWTyped(true); set("weightLbs")(x); }} lw={lw} confirmed={wOk} onConfirmed={setWOk} required={isWeightDosed(med)} testId="treat-weight" /></div>}
           {udder ? (
             <Field label="Dose"><Pick value={v.tubes ?? "1"} onChange={set("tubes")} testId="select-treat-tubes" options={TUBE_AMOUNTS} /></Field>
           ) : (

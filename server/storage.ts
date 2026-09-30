@@ -252,7 +252,8 @@ export class DatabaseStorage {
     } as any).returning();
     return row;
   }
-  async giveDose(taskId: number, date: string, givenBy?: string | null, skipIds: number[] = [], temps: Record<string, number | null> = {}, time: string | null = null) {
+  /** doses/weights: per-goat dose (mL) and checked weight when the dose goes by body weight */
+  async giveDose(taskId: number, date: string, givenBy?: string | null, skipIds: number[] = [], temps: Record<string, number | null> = {}, time: string | null = null, doses: Record<string, number | null> = {}, weights: Record<string, number | null> = {}) {
     return tx(async () => {
       const [task]: any[] = await db.select().from(s.tasks).where(eq(s.tasks.id, taskId));
       if (!task) throw new Error("Task not found");
@@ -271,7 +272,7 @@ export class DatabaseStorage {
         }
         if (!base) continue;
         const t = await this.create("treatments", {
-          animalId: aid, medicationId: base.medicationId, medName: base.medName, date, time: time || null, weightLbs: base.weightLbs, tempF: Number(temps[aid]) || null, doseMl: base.doseMl, drops: base.drops ?? null, pillCount: base.pillCount ?? null, pillUnit: base.pillUnit ?? null, side: base.side ?? null,
+          animalId: aid, medicationId: base.medicationId, medName: base.medName, date, time: time || null, weightLbs: Number(weights[aid]) > 0 ? Number(weights[aid]) : base.weightLbs, tempF: Number(temps[aid]) || null, doseMl: Number(doses[aid]) > 0 ? Math.round(Number(doses[aid]) * 10) / 10 : base.doseMl, drops: base.drops ?? null, pillCount: base.pillCount ?? null, pillUnit: base.pillUnit ?? null, side: base.side ?? null,
           route: base.route, reason: base.reason, givenBy: givenBy || base.givenBy, batchId: base.batchId,
           doseNo: task.doseNo, doseTotal: task.doseTotal, notes: null,
           milkClearDate: addDaysIso(date, med?.milkWithdrawalDays ?? 0), meatClearDate: addDaysIso(date, med?.meatWithdrawalDays ?? 0),

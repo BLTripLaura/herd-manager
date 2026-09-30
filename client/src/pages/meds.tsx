@@ -7,7 +7,8 @@ import { Progress } from "@/components/ui/progress";
 import { PageHeader, Empty } from "@/components/shell";
 import { CalfProSection } from "@/components/calf-pro";
 import { MedDialog, Field, Pick, TreatDialog, MedPick } from "@/components/forms";
-import { useList, useRemove, calcDoseMl, doseRuleText, latestWeight, shortName, type Medication , repeatText, goatName, regName } from "@/lib/herd";
+import { useToast } from "@/hooks/use-toast";
+import { useList, useRemove, calcDoseMl, doseRuleText, latestWeight, weighedText, weightChanged, saveDoseWeights, today, shortName, type Medication , repeatText, goatName, regName } from "@/lib/herd";
 
 export default function Meds() {
   const [treating, setTreating] = useState(false);
@@ -19,6 +20,7 @@ export default function Meds() {
   const [calcMed, setCalcMed] = useState<string | null>(null);
   const [calcAnimal, setCalcAnimal] = useState<string | null>(null);
   const [calcW, setCalcW] = useState("");
+  const { toast } = useToast();
   const cm = meds.find((m) => String(m.id) === calcMed);
   const dose = calcDoseMl(cm, Number(calcW));
 
@@ -37,7 +39,7 @@ export default function Meds() {
         <div className="grid gap-3 sm:grid-cols-[1fr_1fr_140px_auto] sm:items-end">
           <Field label="Medication"><MedPick value={calcMed} onChange={setCalcMed} testId="select-calc-med" meds={meds} /></Field>
           <Field label="Animal (optional)">
-            <Pick value={calcAnimal} testId="select-calc-animal" onChange={(v) => { setCalcAnimal(v); const w = latestWeight(Number(v), weights); if (w) setCalcW(String(w.lbs)); }}
+            <Pick value={calcAnimal} testId="select-calc-animal" onChange={(v) => { setCalcAnimal(v); const w = latestWeight(Number(v), weights); setCalcW(w ? String(w.lbs) : ""); }}
               options={animals.filter((a) => a.status === "active").map((a) => ({ value: String(a.id), label: `#${a.tag ?? "—"} ${goatName(a)}` }))} />
           </Field>
           <Field label="Weight (lb)"><Input type="number" inputMode="decimal" value={calcW} onChange={(e) => setCalcW(e.target.value)} data-testid="input-calc-weight" /></Field>
@@ -46,6 +48,12 @@ export default function Meds() {
             <div className="text-lg font-bold tabular-nums" data-testid="text-calc-dose">{dose !== null ? `${dose} mL` : "—"}</div>
           </div>
         </div>
+        {calcAnimal && (() => { const lw = latestWeight(Number(calcAnimal), weights); const changed = weightChanged(calcW, lw); return (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground" data-testid="text-calc-weighed">
+            <span>On file: {weighedText(lw)}.{changed ? "" : " Update it if the goat has changed."}</span>
+            {changed && <Button size="sm" variant="outline" className="h-7 text-xs" onClick={async () => { await saveDoseWeights([{ animalId: Number(calcAnimal), lbs: calcW, date: today() }], weights); toast({ title: `Saved ${calcW} lb as today's weight` }); }} data-testid="button-calc-save-weight">Save {calcW} lb as today's weight</Button>}
+          </div>
+        ); })()}
         {cm && <p className="mt-2 text-xs text-muted-foreground">{doseRuleText(cm)} · {cm.route}. Always check against your vet's instructions.</p>}
       </div>
 

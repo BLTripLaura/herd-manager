@@ -4,10 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Field } from "@/components/forms";
-import { useList, post, today, addDays, fmtShort, shortName, latestWeight, calcDoseMl, isCdt, GESTATION_DAYS, RECHECK_DAYS, type Breeding, type Animal, goatName, regName } from "@/lib/herd";
+import { useList, post, today, addDays, fmtShort, shortName, latestWeight, calcDoseMl, isCdt, isWeightDosed, saveDoseWeights, GESTATION_DAYS, RECHECK_DAYS, type Breeding, type Animal, goatName, regName } from "@/lib/herd";
 import { apiRequest } from "@/lib/queryClient";
 import { invalidateAll } from "@/lib/herd";
 import { cn } from "@/lib/utils";
+import { WeightCheck, weightOk } from "@/components/weight-check";
 
 /** Quick ultrasound result: positive puts her on the due date roster, negative marks her open */
 export function UltrasoundDialog({ breeding, onOpenChange }: { breeding: Breeding | null; onOpenChange: (o: boolean) => void }) {
@@ -82,15 +83,22 @@ export function PrekidDialog({ breeding, onOpenChange }: { breeding: Breeding | 
   const [date, setDate] = useState(today());
   const [givenBy, setGivenBy] = useState("");
   const [saving, setSaving] = useState(false);
-  useEffect(() => { if (breeding) setDate(today()); }, [breeding]);
+  const [wLbs, setWLbs] = useState("");
+  const [wOk, setWOk] = useState(false);
+  const [wTyped, setWTyped] = useState(false);
+  useEffect(() => { if (breeding) { setDate(today()); setWOk(false); setWTyped(false); } }, [breeding]);
   const doe = animals.find((a) => a.id === breeding?.doeId);
   const cdt = meds.find((m) => /\bcd\s*&?\s*t\b|\bcdt\b/i.test(m.name));
   const bose = meds.find((m) => /\bbo-?se\b/i.test(m.name));
-  const w = breeding ? latestWeight(breeding.doeId, weights) : null;
+  const w = breeding ? latestWeight(breeding.doeId, weights) : undefined;
+  useEffect(() => { if (breeding && !wTyped) { setWLbs(w ? String(w.lbs) : ""); setWOk(false); } }, [breeding, w?.id]); // eslint-disable-line
+  const byWeight = isWeightDosed(cdt) || isWeightDosed(bose);
   const save = async () => {
     if (!breeding) return;
+    if (byWeight && !weightOk(wLbs, w, wOk)) return toast({ title: "Check her weight first", description: w ? `Tap Still correct if ${w.lbs} lb is right, or type today's weight.` : "Enter her weight to work out the doses.", variant: "destructive" });
     setSaving(true);
     try {
+      await saveDoseWeights([{ animalId: breeding.doeId, lbs: wLbs, date }], weights); // the shots are dosed from her newest weight
       await post(`/api/breedings/${breeding.id}/prekid`, { date, givenBy });
       toast({ title: "CD&T and BoSe logged", description: `${doe ? goatName(doe) : "Doe"} · added to her treatment records` });
       onOpenChange(false);
@@ -116,6 +124,7 @@ export function PrekidDialog({ breeding, onOpenChange }: { breeding: Breeding | 
           <Field label="Date given"><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} data-testid="input-prekid-given" /></Field>
           <Field label="Given by"><Input value={givenBy} onChange={(e) => setGivenBy(e.target.value)} data-testid="input-prekid-by" /></Field>
         </div>
+        {doe && <WeightCheck lbs={wLbs} onLbs={(x) => { setWTyped(true); setWLbs(x); }} lw={w} confirmed={wOk} onConfirmed={setWOk} required={byWeight} testId="prekid-weight" />}
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={save} disabled={saving} data-testid="button-save-prekid">Log both shots</Button>
@@ -136,13 +145,22 @@ export function GiveCdtDialog({ item, onOpenChange }: { item: { animal: Animal; 
   const [saving, setSaving] = useState(false);
   const med = meds.find((m) => isCdt(m.name));
   const w = item ? latestWeight(item.animal.id, weights) : undefined;
-  useEffect(() => { if (item) { setDate(today()); const c = calcDoseMl(med, w?.lbs); setDose(c ? String(c) : ""); } }, [item]); // eslint-disable-line
+  const [wLbs, setWLbs] = useState("");
+  const [wOk, setWOk] = useState(false);
+  const [wTyped, setWTyped] = useState(false);
+  const byWeight = isWeightDosed(med);
+  useEffect(() => { if (item) { setDate(today()); setWOk(false); setWTyped(false); } }, [item]); // eslint-disable-line
+  // Newest weight on file, unless one was typed; the dose follows the weight
+  useEffect(() => { if (item && !wTyped) { setWLbs(w ? String(w.lbs) : ""); setWOk(false); } }, [item, w?.id]); // eslint-disable-line
+  useEffect(() => { if (item) { const c = calcDoseMl(med, Number(wLbs)); setDose(c ? String(c) : ""); } }, [item, wLbs, med?.id]); // eslint-disable-line
   const save = async () => {
     if (!item) return;
+    if (byWeight && !weightOk(wLbs, w, wOk)) return toast({ title: "Check the weight first", description: w ? `Tap Still correct if ${w.lbs} lb is right, or type today's weight.` : "Enter the goat's weight to work out the dose.", variant: "destructive" });
     setSaving(true);
     try {
+      await saveDoseWeights([{ animalId: item.animal.id, lbs: wLbs, date }], weights);
       await post("/api/treatments/batch", { treatments: [{
-        animalId: item.animal.id, medicationId: med?.id ?? null, medName: med?.name ?? "CD&T vaccine", date, weightLbs: w?.lbs ?? null,
+        animalId: item.animal.id, medicationId: med?.id ?? null, medName: med?.name ?? "CD&T vaccine", date, weightLbs: Number(wLbs) || null,
         doseMl: dose ? Number(dose) : null, route: med?.route ?? "SQ", reason: item.label,
         milkClearDate: addDays(date, med?.milkWithdrawalDays ?? 0), meatClearDate: addDays(date, med?.meatWithdrawalDays ?? 0), givenBy: givenBy || null, notes: null,
       }] });
@@ -167,6 +185,7 @@ export function GiveCdtDialog({ item, onOpenChange }: { item: { animal: Animal; 
           <Field label="Dose (mL)"><Input type="number" inputMode="decimal" value={dose} onChange={(e) => setDose(e.target.value)} data-testid="input-cdt-dose" /></Field>
           <Field label="Given by"><Input value={givenBy} onChange={(e) => setGivenBy(e.target.value)} data-testid="input-cdt-by" /></Field>
         </div>
+        {item && <WeightCheck lbs={wLbs} onLbs={(x) => { setWTyped(true); setWLbs(x); }} lw={w} confirmed={wOk} onConfirmed={setWOk} required={byWeight} testId="cdt-weight" />}
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={save} disabled={saving} data-testid="button-save-cdt">Log CD&T</Button>

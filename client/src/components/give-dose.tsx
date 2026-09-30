@@ -9,13 +9,17 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { MoreVertical, SkipForward, OctagonX } from "lucide-react";
 import { tempNote, goatName, regName, doseText, taskDoseText } from "@/lib/herd";
-import { useList, useSave, post, today, addDays, fmtShort, fmtTime, nowTime, shortName, type Task } from "@/lib/herd";
+import { useList, useSave, post, today, addDays, fmtShort, fmtTime, nowTime, shortName, latestWeight, isWeightDosed, calcDoseMl, saveDoseWeights, weightChanged, type Task } from "@/lib/herd";
+import { weightOk } from "@/components/weight-check";
+import { Check } from "lucide-react";
 
-/** Log a scheduled repeat dose. Uses each goat's dose from the first treatment in the series. */
+/** Log a scheduled repeat dose. Fixed doses repeat the first treatment's dose; weight-based doses are
+    worked out again from each goat's newest weight, which has to be checked (or updated) first. */
 export function GiveDoseDialog({ task, onClose }: { task: Task | null; onClose: () => void }) {
   const { data: animals = [] } = useList("animals");
   const { data: treatments = [] } = useList("treatments");
   const { data: meds = [] } = useList("medications");
+  const { data: weightList = [] } = useList("weights");
   const saveTask = useSave("tasks");
   const { toast } = useToast();
   const [date, setDate] = useState(today());
@@ -24,22 +28,40 @@ export function GiveDoseDialog({ task, onClose }: { task: Task | null; onClose: 
   const [skip, setSkip] = useState<number[]>([]);
   const [busy, setBusy] = useState(false);
   const [temps, setTemps] = useState<Record<number, string>>({});
+  const [wv, setWv] = useState<Record<number, string>>({}); // typed weights
+  const [wok, setWok] = useState<Record<number, boolean>>({}); // weight on file confirmed
 
-  useEffect(() => { if (task) { setDate(today()); setTime(nowTime()); setSkip([]); setTemps({}); } }, [task?.id]); // eslint-disable-line
+  useEffect(() => { if (task) { setDate(today()); setTime(nowTime()); setSkip([]); setTemps({}); setWv({}); setWok({}); } }, [task?.id]); // eslint-disable-line
 
   if (!task) return null;
   const ids = String(task.animalIds || task.animalId || "").split(",").map(Number).filter(Boolean);
   const series = treatments.filter((t) => t.batchId === task.batchId).sort((a, b) => a.date.localeCompare(b.date));
   const med = meds.find((m) => m.id === task.medicationId);
-  const rows = ids.map((id) => { const f = series.find((t) => t.animalId === id); return { a: animals.find((x) => x.id === id), dose: f ? f.doseMl : task.doseMl, text: f ? doseText(f) : taskDoseText(task) }; });
+  const byWeight = isWeightDosed(med);
+  const rows = ids.map((id) => {
+    const f = series.find((t) => t.animalId === id);
+    const lw = latestWeight(id, weightList);
+    const w = wv[id] ?? (lw ? String(lw.lbs) : "");
+    // weight-based: dose from the newest (checked) weight; otherwise the first treatment's dose
+    const calc = byWeight ? calcDoseMl(med, Number(w)) : null;
+    const dose = byWeight ? calc : f ? f.doseMl : task.doseMl;
+    return { a: animals.find((x) => x.id === id), lw, w, ok: weightOk(w, lw, !!wok[id]), dose, text: byWeight ? (calc != null ? `${calc} mL` : "") : f ? doseText(f) : taskDoseText(task) };
+  });
   const drops = rows.every((r) => r.dose == null) && rows.some((r) => r.text); // counted doses (drops, tablets, tubes): no mL to add up
   const giving = rows.filter((r) => r.a && !skip.includes(r.a.id));
   const total = giving.reduce((s, r) => s + (r.dose ?? 0), 0);
 
+  const unchecked = byWeight ? giving.filter((r) => !r.ok) : [];
   const give = async () => {
+    if (unchecked.length) return toast({ title: `Check ${unchecked.length} weight${unchecked.length === 1 ? "" : "s"} first`, description: "The dose goes by weight. Tap Still correct, or type today's weight.", variant: "destructive" });
     setBusy(true);
     try {
-      const created = await post(`/api/tasks/${task.id}/give`, { date, time: time || null, givenBy: givenBy || null, skipIds: skip, temps: Object.fromEntries(Object.entries(temps).filter(([, x]) => Number(x) > 0).map(([k, x]) => [k, Number(x)])) });
+      const extra = byWeight ? {
+        doses: Object.fromEntries(giving.map((r) => [r.a!.id, r.dose])),
+        weights: Object.fromEntries(giving.map((r) => [r.a!.id, Number(r.w) || null])),
+      } : {};
+      if (byWeight) await saveDoseWeights(giving.map((r) => ({ animalId: r.a!.id, lbs: r.w, date })), weightList);
+      const created = await post(`/api/tasks/${task.id}/give`, { ...extra, date, time: time || null, givenBy: givenBy || null, skipIds: skip, temps: Object.fromEntries(Object.entries(temps).filter(([, x]) => Number(x) > 0).map(([k, x]) => [k, Number(x)])) });
       toast({ title: task.doseNo ? `Logged dose ${task.doseNo} of ${task.doseTotal}` : `Logged ${task.medName ?? task.title.split(" — ")[0]}${task.repeatEvery ? ` · next in ${task.repeatEvery} day${task.repeatEvery === 1 ? "" : "s"}` : ""}`, description: `${created.length} animal${created.length === 1 ? "" : "s"}${drops ? "" : ` · ${total.toFixed(1)} mL`}` });
       onClose();
     } finally { setBusy(false); }
@@ -63,19 +85,29 @@ export function GiveDoseDialog({ task, onClose }: { task: Task | null; onClose: 
           <Field label="Given by" className="col-span-2"><Input value={givenBy} onChange={(e) => setGivenBy(e.target.value)} /></Field>
         </div>
         <ul className="overflow-hidden rounded-md border">
-          {rows.map(({ a, dose, text }) => a && (
-            <li key={a.id} className="flex items-center gap-3 border-b px-3 py-2 last:border-b-0">
+          {rows.map(({ a, dose, text, lw, w, ok }) => a && (
+            <li key={a.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b px-3 py-2 last:border-b-0">
               <Checkbox checked={!skip.includes(a.id)} onCheckedChange={() => setSkip(skip.includes(a.id) ? skip.filter((x) => x !== a.id) : [...skip, a.id])} aria-label={`Include ${a.name}`} data-testid={`checkbox-give-${a.id}`} />
               <span className="min-w-0 flex-1 truncate text-sm">{goatName(a)} {a.tag && <span className="text-xs text-muted-foreground">#{a.tag}</span>}</span>
               <Input className={`h-8 w-20 text-right tabular-nums ${tempNote(temps[a.id])?.tone === "high" ? "border-destructive text-destructive" : tempNote(temps[a.id])?.tone === "low" ? "border-sky-500" : ""}`} inputMode="decimal" placeholder="°F" aria-label={`Temperature for ${a.name} (optional)`} value={temps[a.id] ?? ""} onChange={(e) => setTemps({ ...temps, [a.id]: e.target.value })} disabled={skip.includes(a.id)} data-testid={`input-give-temp-${a.id}`} />
               <span className="max-w-[8.5rem] shrink-0 text-right text-sm font-semibold tabular-nums">{text || (dose != null ? `${dose} mL` : "—")}</span>
+              {byWeight && !skip.includes(a.id) && (
+                <div className="flex basis-full items-center gap-2 pl-7 text-xs" data-testid={`row-give-weight-${a.id}`}>
+                  <Input className={`h-8 w-20 text-right tabular-nums ${ok ? "border-emerald-500/60" : "border-amber-400"}`} inputMode="decimal" placeholder="lb" aria-label={`Weight for ${a.name}`} value={w} onChange={(e) => { setWv({ ...wv, [a.id]: e.target.value }); setWok({ ...wok, [a.id]: false }); }} data-testid={`input-give-weight-${a.id}`} />
+                  <span className="text-muted-foreground">lb</span>
+                  {weightChanged(w, lw)
+                    ? <span className="font-medium text-emerald-700 dark:text-emerald-300">New weight, will be saved</span>
+                    : lw ? <button type="button" onClick={() => setWok({ ...wok, [a.id]: !wok[a.id] })} className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-medium ${ok ? "border-emerald-500/60 text-emerald-700 dark:text-emerald-300" : "border-amber-400 text-amber-800 dark:text-amber-200"}`} data-testid={`button-give-wok-${a.id}`}>{ok ? <><Check className="h-3 w-3" />Still correct</> : `Still ${lw.lbs} lb? (weighed ${fmtShort(lw.date)})`}</button>
+                    : <span className="font-medium text-amber-800 dark:text-amber-200">Enter weight</span>}
+                </div>
+              )}
             </li>
           ))}
         </ul>
         <p className="-mt-2 text-xs text-muted-foreground">Temperature is optional · normal 101.5–103.5 °F</p>
         {med && (
           <p className="text-xs text-muted-foreground">
-            {series.length ? "Same dose as the first treatment." : "Dose from the reminder."} {(med.milkWithdrawalDays ?? 0) + (med.meatWithdrawalDays ?? 0) > 0
+            {byWeight ? "Dose worked out from each goat's newest weight." : series.length ? "Same dose as the first treatment." : "Dose from the reminder."} {(med.milkWithdrawalDays ?? 0) + (med.meatWithdrawalDays ?? 0) > 0
               ? <>Withdrawal restarts from this dose: milk clear {fmtShort(addDays(date, med.milkWithdrawalDays ?? 0))}, meat clear {fmtShort(addDays(date, med.meatWithdrawalDays ?? 0))}.</>
               : <b className="text-amber-700 dark:text-amber-300">No withdrawal days are entered for this medication — confirm with your vet.</b>}{drops ? "" : ` ${total.toFixed(1)} mL will come out of stock (${Math.round((med.onHandMl ?? 0) * 10) / 10} mL on hand).`}
           </p>

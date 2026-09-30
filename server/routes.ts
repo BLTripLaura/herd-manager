@@ -385,7 +385,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/tasks/:id/give", async (req, res) => {
     try {
       const date = typeof req.body?.date === "string" && req.body.date ? req.body.date : new Date().toISOString().slice(0, 10);
-      res.json(await storage.giveDose(Number(req.params.id), date, req.body?.givenBy, req.body?.skipIds ?? [], req.body?.temps ?? {}, typeof req.body?.time === "string" ? req.body.time : null));
+      res.json(await storage.giveDose(Number(req.params.id), date, req.body?.givenBy, req.body?.skipIds ?? [], req.body?.temps ?? {}, typeof req.body?.time === "string" ? req.body.time : null, req.body?.doses ?? {}, req.body?.weights ?? {}));
     } catch (e: any) { res.status(400).json({ message: e.message }); }
   });
 
