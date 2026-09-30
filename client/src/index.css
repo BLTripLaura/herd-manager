@@ -337,3 +337,8 @@
   .report-print tr { break-inside: avoid; }
   .report-print .rp-group td { font-weight: 700; background: #e2e2e2 !important; border-bottom: 1pt solid #000; padding-top: 4pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* Pinch to zoom is allowed everywhere. On touch screens keep typing boxes at 16px so iPhones and iPads don't jump-zoom when a box is tapped. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, select { font-size: 16px !important; }
+}
