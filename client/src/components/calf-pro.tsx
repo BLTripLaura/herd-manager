@@ -63,7 +63,8 @@ export function CalfProSection({ onGiven }: { onGiven?: () => void } = {}) {
       setPicked(null);
       toast({ title: `Calf-Pro logged for ${chosen.length} kid${chosen.length === 1 ? "" : "s"}` });
       onGiven?.();
-    } finally { setBusy(false); }
+    } catch (e: any) { toast({ title: "Could not save", description: String(e?.message ?? e), variant: "destructive" }); }
+    finally { setBusy(false); }
   };
   const saveWeights = async () => {
     const list = kids.filter((k) => Number(wVals[k.animal.id]) > 0).map((k) => ({ animalId: k.animal.id, date: t, lbs: Number(wVals[k.animal.id]), method: "scale" }));

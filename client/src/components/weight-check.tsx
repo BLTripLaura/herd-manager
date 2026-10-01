@@ -35,7 +35,7 @@ export function WeightCheck({ lbs, onLbs, lw, confirmed, onConfirmed, required =
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
         On file: {weighedText(lw)}.{" "}
-        {required ? (lw ? "Tap Still correct, or type today's weight and it will be saved." : "Enter the goat's weight to work out the dose. It will be saved to the goat's records.") : "Optional for this medicine."}
+        {required ? (lw ? "Tap Still correct, or type today's weight and it will be saved. Typing the dose yourself also works." : "Enter the goat's weight to work out the dose (it will be saved), or type the dose yourself.") : "Optional here."}
       </p>
     </div>
   );

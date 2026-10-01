@@ -488,6 +488,10 @@ export function TreatDialog({ open, onOpenChange, animal: fixed }: { open: boole
   const udder = (v.route ?? med?.route) === "Intramammary";
   const sided = hasSide(v.route ?? med?.route);
   const herd = animals.filter((a) => a.status === "active").sort((a, b) => a.name.localeCompare(b.name));
+  // The weight has to be checked only when the dose saved is the one worked out from weight (in mL).
+  // Tablets/capsules, udder tubes, or a dose typed in by hand don't need it.
+  const autoDose = v.doseMl === "" || v.doseMl == null || Number(v.doseMl) === calcDoseMl(med, Number(v.weightLbs));
+  const needW = isWeightDosed(med) && !udder && !(oral && v.doseUnit && v.doseUnit !== "mL") && autoDose;
   useEffect(() => {
     if (med) setV((p: any) => ({ ...p, doseMl: calcDoseMl(med, Number(p.weightLbs)) ?? "", route: med.route }));
   }, [v.medicationId, v.weightLbs]); // eslint-disable-line
@@ -500,7 +504,7 @@ export function TreatDialog({ open, onOpenChange, animal: fixed }: { open: boole
     const times = Math.max(0, Math.floor(Number(v.times) || 0));
     const every = Math.floor(Number(v.every) || 0);
     if (times > 0 && every < 1) return toast({ title: "Enter the time between doses", variant: "destructive" });
-    if (isWeightDosed(med) && !weightOk(v.weightLbs, lw, wOk)) return toast({ title: "Check the weight first", description: lw ? `Tap Still correct if ${lw.lbs} lb is right, or type today's weight.` : "Enter the goat's weight to work out the dose.", variant: "destructive" });
+    if (needW && !weightOk(v.weightLbs, lw, wOk)) return toast({ title: "Check the weight first", description: lw ? `Tap Still correct if ${lw.lbs} lb is right, or type today's weight. Or type the dose yourself.` : "Enter the goat's weight to work out the dose, or type the dose yourself.", variant: "destructive" });
     const unit: RepeatUnit = v.unit === "hours" ? "hours" : "days";
     const plan = repeatPlan(v.date, String(times), String(every), unit, v.time, v.barnOn ? barnHours : null).slice(1);
     setSaving(true);
@@ -519,7 +523,8 @@ export function TreatDialog({ open, onOpenChange, animal: fixed }: { open: boole
       });
       toast({ title: "Treatment logged", description: `${goatName(animal)} · ${med.name}${times ? ` · ${times} repeat${times > 1 ? "s" : ""} scheduled` : ""}${newW ? ` · new weight ${v.weightLbs} lb saved` : ""}` });
       onOpenChange(false);
-    } finally { setSaving(false); }
+    } catch (e: any) { toast({ title: "Could not save", description: String(e?.message ?? e), variant: "destructive" }); }
+    finally { setSaving(false); }
   };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -539,7 +544,7 @@ export function TreatDialog({ open, onOpenChange, animal: fixed }: { open: boole
           </Field>
           <Field label="Date"><Input type="date" value={v.date} onChange={(e) => set("date")(e.target.value)} /></Field>
           <Field label="Time given"><Input type="time" value={v.time ?? ""} onChange={(e) => set("time")(e.target.value)} data-testid="input-treat-time" /></Field>
-          {animal && <div className="col-span-2"><WeightCheck lbs={v.weightLbs} onLbs={(x) => { setWTyped(true); set("weightLbs")(x); }} lw={lw} confirmed={wOk} onConfirmed={setWOk} required={isWeightDosed(med)} testId="treat-weight" /></div>}
+          {animal && <div className="col-span-2"><WeightCheck lbs={v.weightLbs} onLbs={(x) => { setWTyped(true); set("weightLbs")(x); }} lw={lw} confirmed={wOk} onConfirmed={setWOk} required={needW} testId="treat-weight" /></div>}
           {udder ? (
             <Field label="Dose"><Pick value={v.tubes ?? "1"} onChange={set("tubes")} testId="select-treat-tubes" options={TUBE_AMOUNTS} /></Field>
           ) : (

@@ -80,7 +80,10 @@ export default function Batch() {
     });
   const treatRows = chosen.filter((a) => !rows[a.id]?.skip);
   const byWeight = isWeightDosed(med);
-  const unchecked = byWeight ? treatRows.filter((a) => !weightOk(rows[a.id]?.w, latestWeight(a.id, weights), !!rows[a.id]?.ok)) : [];
+  // A dose typed in by hand (not the one worked out from weight) doesn't need a weight check
+  const autoDose = (a: { id: number }) => { const r = rows[a.id]; return !r?.dose || Number(r.dose) === calcDoseMl(med, Number(r.w)); };
+  const needW = (a: { id: number }) => byWeight && !udder && !pillU && autoDose(a);
+  const unchecked = treatRows.filter((a) => needW(a) && !weightOk(rows[a.id]?.w, latestWeight(a.id, weights), !!rows[a.id]?.ok));
   const totalMl = udder ? treatRows.length * (Number(bTubes) || 1) * (bSide === "Both" ? 2 : 1) : treatRows.reduce((s, a) => s + (Number(rows[a.id]?.dose) || 0), 0);
 
   const saveTreatments = async () => {
@@ -102,7 +105,8 @@ export default function Batch() {
         nextDoseDate: null,
       })) });
       toast({ title: `Treated ${treatRows.length} animals`, description: `${med.name} · ${unitWord === "mL" ? `${totalMl.toFixed(1)} mL used` : `${Math.round(totalMl * 10) / 10} ${unitWord}`}${times ? ` · ${times} repeat${times > 1 ? "s" : ""} added to Today` : ""}` });
-    } finally { setBusy(false); }
+    } catch (e: any) { toast({ title: "Could not save", description: String(e?.message ?? e), variant: "destructive" }); }
+    finally { setBusy(false); }
   };
 
   /* ---- weights ---- */
@@ -228,9 +232,9 @@ export default function Batch() {
               </div>
               {chosen.length > 0 && (
                 <div className="overflow-hidden rounded-lg border bg-card">
-                  {byWeight && (
+                  {byWeight && !udder && !pillU && (
                     <div className={cn("flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2 text-xs", unchecked.length ? "bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200" : "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200")} data-testid="bar-batch-weights">
-                      <span className="flex items-center gap-1.5 font-medium"><Scale className="h-3.5 w-3.5" />{unchecked.length ? `This dose goes by weight. Check ${unchecked.length} weight${unchecked.length === 1 ? "" : "s"}: tap ✓ if the weight on file is right, or type today's weight.` : "All weights checked. New weights will be saved to each goat."}</span>
+                      <span className="flex items-center gap-1.5 font-medium"><Scale className="h-3.5 w-3.5" />{unchecked.length ? `This dose goes by weight. Check ${unchecked.length} weight${unchecked.length === 1 ? "" : "s"}: tap to confirm the weight on file, type today's weight, or type the dose yourself.` : "All weights checked. New weights will be saved to each goat."}</span>
                       {unchecked.length > 0 && unchecked.some((a) => latestWeight(a.id, weights)) && (
                         <Button size="sm" variant="outline" className="h-7 bg-background text-xs" onClick={() => setRows((p) => { const n = { ...p }; for (const a of unchecked) if (latestWeight(a.id, weights) && !weightChanged(n[a.id]?.w, latestWeight(a.id, weights))) n[a.id] = { ...n[a.id], ok: true }; return n; })} data-testid="button-batch-confirm-all">I checked them: all correct</Button>
                       )}
@@ -247,13 +251,13 @@ export default function Batch() {
                     return (
                       <div key={a.id} className={cn("grid grid-cols-[1fr_auto_auto_auto_auto] items-center gap-2 border-b px-3 py-2 last:border-b-0 sm:gap-3", r.skip && "opacity-40")} data-testid={`row-batch-treat-${a.id}`}>
                         <div className="min-w-0"><div className="truncate text-sm font-medium">{goatName(a)}</div><div className="text-xs text-muted-foreground">#{a.tag} · {lw ? `${lw.lbs} lb on ${fmtShort(lw.date)}` : "no weight on file"}</div>
-                          {byWeight && !r.skip && (changed
+                          {needW(a) && !r.skip && (changed
                             ? <div className="text-xs font-medium text-emerald-700 dark:text-emerald-300">New weight, will be saved</div>
                             : lw ? <button type="button" onClick={() => setRow(a.id, { ok: !r.ok })} className={cn("mt-0.5 inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs font-medium", ok ? "border-emerald-500/60 text-emerald-700 dark:text-emerald-300" : "border-amber-400 text-amber-800 dark:text-amber-200")} data-testid={`button-batch-wok-${a.id}`}>{ok ? <><Check className="h-3 w-3" />Weight checked</> : "Tap to confirm weight"}</button>
                             : <div className="text-xs font-medium text-amber-800 dark:text-amber-200">Enter weight</div>)}
                         </div>
                         <Input className={cn(tInput, "sm:w-20", tempNote(r.temp)?.tone === "high" && "border-destructive text-destructive", tempNote(r.temp)?.tone === "low" && "border-sky-500")} inputMode="decimal" placeholder="opt." aria-label={`Temperature for ${a.name} (optional)`} value={r.temp ?? ""} onChange={(e) => setRow(a.id, { temp: e.target.value })} disabled={r.skip} data-testid={`input-batch-temp-${a.id}`} />
-                        <Input className={cn(tInput, byWeight && !r.skip && (ok ? "border-emerald-500/60" : "border-amber-400"))} inputMode="decimal" value={r.w} onChange={(e) => setRow(a.id, { w: e.target.value })} disabled={r.skip} data-testid={`input-batch-weight-${a.id}`} />
+                        <Input className={cn(tInput, needW(a) && !r.skip && (ok ? "border-emerald-500/60" : "border-amber-400"))} inputMode="decimal" value={r.w} onChange={(e) => setRow(a.id, { w: e.target.value })} disabled={r.skip} data-testid={`input-batch-weight-${a.id}`} />
                         <Input className={cn(tInput, "font-semibold")} inputMode="decimal" value={udder ? (bTubes === "0.5" ? "½" : bTubes) : r.dose} onChange={(e) => setRow(a.id, { dose: e.target.value })} disabled={r.skip || udder} data-testid={`input-batch-dose-${a.id}`} />
                         <Button variant="ghost" size="icon" aria-label={r.skip ? "Include" : "Skip"} onClick={() => setRow(a.id, { skip: !r.skip })}>{r.skip ? <Check /> : <X />}</Button>
                       </div>
