@@ -8,7 +8,7 @@ import { PageHeader, Empty } from "@/components/shell";
 import { CalfProSection } from "@/components/calf-pro";
 import { MedDialog, Field, Pick, TreatDialog, MedPick } from "@/components/forms";
 import { useToast } from "@/hooks/use-toast";
-import { useList, useRemove, calcDoseMl, doseRuleText, latestWeight, weighedText, weightChanged, saveDoseWeights, today, shortName, type Medication , repeatText, goatName, regName } from "@/lib/herd";
+import { useList, useRemove, calcDoseMl, doseRuleText, isTabletMg, tabletDose, latestWeight, weighedText, weightChanged, saveDoseWeights, today, shortName, type Medication , repeatText, goatName, regName } from "@/lib/herd";
 
 export default function Meds() {
   const [treating, setTreating] = useState(false);
@@ -23,6 +23,9 @@ export default function Meds() {
   const { toast } = useToast();
   const cm = meds.find((m) => String(m.id) === calcMed);
   const dose = calcDoseMl(cm, Number(calcW));
+  const tabCalc = isTabletMg(cm);
+  const tFirst = tabCalc && Number(cm?.firstDoseAmount) > 0 && cm?.firstDoseAmount !== cm?.doseAmount ? tabletDose(cm, calcW, true) : null;
+  const tLater = tabCalc ? tabletDose(cm, calcW, false) : null;
 
   return (
     <>
@@ -45,7 +48,7 @@ export default function Meds() {
           <Field label="Weight (lb)"><Input type="number" inputMode="decimal" value={calcW} onChange={(e) => setCalcW(e.target.value)} data-testid="input-calc-weight" /></Field>
           <div className="rounded-md bg-primary px-4 py-2 text-center text-primary-foreground">
             <div className="text-xs opacity-80">Dose</div>
-            <div className="text-lg font-bold tabular-nums" data-testid="text-calc-dose">{dose !== null ? `${dose} mL` : "—"}</div>
+            <div className="text-lg font-bold tabular-nums" data-testid="text-calc-dose">{tabCalc ? (tLater ? `${tLater.mg} mg` : "—") : dose !== null ? `${dose} mL` : "—"}</div>
           </div>
         </div>
         {calcAnimal && (() => { const lw = latestWeight(Number(calcAnimal), weights); const changed = weightChanged(calcW, lw); return (
@@ -54,6 +57,13 @@ export default function Meds() {
             {changed && <Button size="sm" variant="outline" className="h-7 text-xs" onClick={async () => { await saveDoseWeights([{ animalId: Number(calcAnimal), lbs: calcW, date: today() }], weights); toast({ title: `Saved ${calcW} lb as today's weight` }); }} data-testid="button-calc-save-weight">Save {calcW} lb as today's weight</Button>}
           </div>
         ); })()}
+        {tabCalc && tLater && (
+          <ul className="mt-2 space-y-0.5 text-sm" data-testid="list-calc-tablets">
+            {tFirst && <li><b>First dose:</b> {tFirst.text} <span className="text-xs text-muted-foreground">(works out to {tFirst.targetMg} mg)</span></li>}
+            <li><b>{tFirst ? "Later doses" : "Dose"}:</b> {tLater.text} <span className="text-xs text-muted-foreground">(works out to {tLater.targetMg} mg)</span></li>
+            {[tFirst, tLater].some((d) => d && Math.abs(d.offPct) > 20) && <li className="text-xs font-semibold text-amber-800 dark:text-amber-200">The tablet sizes can't get close to this dose for this weight. Check with your vet.</li>}
+          </ul>
+        )}
         {cm && <p className="mt-2 text-xs text-muted-foreground">{doseRuleText(cm)} · {cm.route}. Always check against your vet's instructions.</p>}
       </div>
 

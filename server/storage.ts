@@ -1,4 +1,5 @@
 import * as s from "@shared/schema";
+import { isTabletMg, tabletDose, tabletFields } from "@shared/dose";
 import { and, eq, sql, getTableName } from "drizzle-orm";
 import { db, tx, all, get, run } from "./db";
 import { findParent, kidBreed, kidHerdbook, defaultTattooLocation } from "@shared/breed";
@@ -271,12 +272,21 @@ export class DatabaseStorage {
             route: task.route ?? med?.route ?? null, reason: why || null, givenBy: null, batchId: task.batchId };
         }
         if (!base) continue;
+        // Tablets in mg: each later dose is worked out again from the newest weight and rounded to the tablet sizes
+        let tabs: any = {};
+        let tabW: number | null = null;
+        if (isTabletMg(med) && (base.doseDetail || !prior.length)) {
+          const lw: any = Number(weights[aid]) > 0 ? { w: Number(weights[aid]) } : await get("SELECT lbs AS w FROM weights WHERE animal_id = ? ORDER BY date DESC, id DESC LIMIT 1", aid);
+          const td = tabletDose(med, lw?.w ?? null, false);
+          if (td) { tabs = tabletFields(td); tabW = Number(med.dosePerLbs) > 0 ? lw?.w ?? null : null; }
+        }
         const t = await this.create("treatments", {
           animalId: aid, medicationId: base.medicationId, medName: base.medName, date, time: time || null, weightLbs: Number(weights[aid]) > 0 ? Number(weights[aid]) : base.weightLbs, tempF: Number(temps[aid]) || null, doseMl: Number(doses[aid]) > 0 ? Math.round(Number(doses[aid]) * 10) / 10 : base.doseMl, drops: base.drops ?? null, pillCount: base.pillCount ?? null, pillUnit: base.pillUnit ?? null, side: base.side ?? null,
           route: base.route, reason: base.reason, givenBy: givenBy || base.givenBy, batchId: base.batchId,
           doseNo: task.doseNo, doseTotal: task.doseTotal, notes: null,
           milkClearDate: addDaysIso(date, med?.milkWithdrawalDays ?? 0), meatClearDate: addDaysIso(date, med?.meatWithdrawalDays ?? 0),
           nextDoseDate: null,
+          ...(tabs.doseDetail ? { ...tabs, weightLbs: tabW ?? base.weightLbs ?? null } : base.doseDetail ? { doseMg: base.doseMg ?? null, doseDetail: base.doseDetail } : {}),
         });
         if (t.medicationId && t.doseMl) await this.adjustStock(t.medicationId, -t.doseMl);
         created.push(t);

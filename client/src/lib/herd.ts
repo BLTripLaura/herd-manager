@@ -1,6 +1,8 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { findParent } from "@shared/breed";
+import { isTabletMg, tabletRuleText } from "@shared/dose";
+export { TABLET_MG, isTabletMg, tabletDose, tabletFields, tabletSizes, tabletRuleText, type TabletDose } from "@shared/dose";
 import type { Animal, Weight, Medication, Treatment, Breeding, Milk, Task, Pasture, PastureMove, OutsideBuck, Heat, Show, AnimalNote, Lactation, Care, BreedingPlan, Contact } from "@shared/schema";
 
 export type { Animal, Weight, Medication, Treatment, Breeding, Milk, Task, Pasture, PastureMove, OutsideBuck, Heat, Show, AnimalNote, Lactation, Care, BreedingPlan, Contact };
@@ -102,7 +104,8 @@ export function latestWeight(animalId: number, weights: Weight[] = []) {
 }
 /** Doses worked out from body weight (these need a checked weight before they're given) */
 export const WEIGHT_DOSE_UNITS = ["mg/lb", "mg/kg", "mL/100lb", "mL/25lb", "mL/lb"];
-export const isWeightDosed = (m?: { doseUnit?: string | null } | null) => !!m && WEIGHT_DOSE_UNITS.includes(m.doseUnit ?? "");
+export const isWeightDosed = (m?: { doseUnit?: string | null; dosePerLbs?: number | null } | null) =>
+  !!m && (WEIGHT_DOSE_UNITS.includes(m.doseUnit ?? "") || (m.doseUnit === "tab-mg" && Number(m.dosePerLbs) > 0));
 /** "85 lb · weighed Sep 12 (18 days ago)" */
 export const weighedText = (w?: Weight) => (w ? `${w.lbs} lb · weighed ${fmtShort(w.date)} (${relDays(w.date)})` : "No weight on file");
 /** A typed weight that isn't the one on file: save it so every later dose uses it */
@@ -125,6 +128,7 @@ export const DOSE_UNITS = [
   { value: "drops", label: "Drops (fixed, eye meds)" },
   { value: "capsules", label: "Capsules (fixed, oral)" },
   { value: "tablets", label: "Tablets (fixed, oral)" },
+  { value: "tab-mg", label: "mg, as tablets/capsules" },
   { value: "tubes", label: "Tubes per side (intramammary)" },
 ];
 /** Eye and udder treatments are given to one side or both */
@@ -134,7 +138,7 @@ export const hasSide = (route?: string | null) => route === "Eye" || route === "
 export const TUBE_AMOUNTS = [{ value: "1", label: "1 tube per side" }, { value: "0.5", label: "½ tube per side" }];
 const tubes = (n: number) => `${n === 0.5 ? "½" : n} tube${n > 1 ? "s" : ""} per side`;
 /** Oral meds given as capsules or tablets: "capsule" | "tablet", or null */
-export const pillUnitOf = (m?: { doseUnit?: string | null } | null) => m?.doseUnit === "capsules" ? "capsule" : m?.doseUnit === "tablets" ? "tablet" : m?.doseUnit === "tubes" ? "tube" : null;
+export const pillUnitOf = (m?: { doseUnit?: string | null; pillForm?: string | null } | null) => m?.doseUnit === "tab-mg" ? (m.pillForm === "capsule" ? "capsule" : "tablet") : m?.doseUnit === "capsules" ? "capsule" : m?.doseUnit === "tablets" ? "tablet" : m?.doseUnit === "tubes" ? "tube" : null;
 /** How an oral dose can be measured when it's logged */
 export const ORAL_UNITS = [{ value: "mL", label: "mL" }, { value: "capsule", label: "Capsule" }, { value: "tablet", label: "Tablet" }];
 const pills = (n: number, u: string) => `${n} ${u}${n === 1 ? "" : "s"}`;
@@ -146,8 +150,8 @@ export const everyText = (n?: number | null) => (!n ? "" : n === 1 ? "Every day"
 export const taskDoseText = (k: { drops?: number | null; doseMl?: number | null; doseText?: string | null; route?: string | null }) =>
   [doseText(k) || k.doseText || "", k.route || ""].filter(Boolean).join(" · ");
 /** A logged dose as text: "2 drops" or "1.5 mL" */
-export const doseText = (t: { doseMl?: number | null; drops?: number | null; pillCount?: number | null; pillUnit?: string | null; side?: string | null }) => {
-  const d = t.pillCount && t.pillUnit === "tube" ? tubes(t.pillCount) : t.pillCount && t.pillUnit ? pills(t.pillCount, t.pillUnit) : t.drops ? `${t.drops} drop${t.drops === 1 ? "" : "s"}` : t.doseMl ? `${t.doseMl} mL` : "";
+export const doseText = (t: { doseMl?: number | null; drops?: number | null; pillCount?: number | null; pillUnit?: string | null; side?: string | null; doseDetail?: string | null }) => {
+  const d = t.doseDetail ? t.doseDetail : t.pillCount && t.pillUnit === "tube" ? tubes(t.pillCount) : t.pillCount && t.pillUnit ? pills(t.pillCount, t.pillUnit) : t.drops ? `${t.drops} drop${t.drops === 1 ? "" : "s"}` : t.doseMl ? `${t.doseMl} mL` : "";
   return [d, t.side ? (t.side === "Both" ? "both sides" : t.side) : ""].filter(Boolean).join(" · ");
 };
 
@@ -172,6 +176,7 @@ export function calcDoseMl(med: Medication | undefined, lbs: number | undefined 
 
 export function doseRuleText(m: Medication) {
   const u = m.doseUnit;
+  if (isTabletMg(m)) return tabletRuleText(m);
   if (u === "mL/head") return `${m.doseAmount} mL per head`;
   if (u === "tubes") return tubes(m.doseAmount || 1);
   if (u === "capsules" || u === "tablets") return `${pills(m.doseAmount, u.slice(0, -1))} per dose`;

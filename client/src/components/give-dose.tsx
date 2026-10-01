@@ -9,7 +9,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { MoreVertical, SkipForward, OctagonX } from "lucide-react";
 import { tempNote, goatName, regName, doseText, taskDoseText } from "@/lib/herd";
-import { useList, useSave, post, today, addDays, fmtShort, fmtTime, nowTime, shortName, latestWeight, isWeightDosed, calcDoseMl, saveDoseWeights, weightChanged, type Task } from "@/lib/herd";
+import { useList, useSave, post, today, addDays, fmtShort, fmtTime, nowTime, shortName, latestWeight, isWeightDosed, calcDoseMl, saveDoseWeights, weightChanged, isTabletMg, tabletDose, type Task } from "@/lib/herd";
 import { weightOk } from "@/components/weight-check";
 import { Check } from "lucide-react";
 
@@ -43,10 +43,15 @@ export function GiveDoseDialog({ task, onClose }: { task: Task | null; onClose: 
     const w = wv[id] ?? (lw ? String(lw.lbs) : "");
     // Worked out again from the newest (checked) weight only when the series is an mL dose by weight.
     // Doses set as tablets, mg or text (like "15 mg") repeat as they were.
-    const wb = isWeightDosed(med) && (f ? f.doseMl != null && !f.pillCount && !f.drops : task.doseMl != null || !task.doseText);
-    const calc = wb ? calcDoseMl(med, Number(w)) : null;
-    const dose = wb ? calc : f ? f.doseMl : task.doseMl;
-    return { a: animals.find((x) => x.id === id), wb, lw, w, ok: !wb || weightOk(w, lw, !!wok[id]), dose, text: wb ? (calc != null ? `${calc} mL` : "") : (f ? doseText(f) : "") || taskDoseText(task) };
+    const b = f ?? series[0];
+    // Tablets in mg: later dose from the newest weight, rounded to the tablet sizes (worked out the same way on the server)
+    const tabRow = isTabletMg(med) && (b ? !!b.doseDetail : true);
+    const td = tabRow ? tabletDose(med, w, false) : null;
+    const wb = tabRow ? isWeightDosed(med) : isWeightDosed(med) && (f ? f.doseMl != null && !f.pillCount && !f.drops : task.doseMl != null || !task.doseText);
+    const calc = wb && !tabRow ? calcDoseMl(med, Number(w)) : null;
+    const dose = tabRow ? null : wb ? calc : f ? f.doseMl : task.doseMl;
+    const text = tabRow ? td?.text ?? (wb ? "needs weight" : "") : wb ? (calc != null ? `${calc} mL` : "") : (f ? doseText(f) : "") || taskDoseText(task);
+    return { a: animals.find((x) => x.id === id), wb, tabRow, lw, w, ok: (!wb || weightOk(w, lw, !!wok[id])) && (!tabRow || !!td), dose, text };
   });
   const byWeight = rows.some((r) => r.wb);
   const drops = rows.every((r) => r.dose == null) && rows.some((r) => r.text); // counted doses (drops, tablets, tubes): no mL to add up
@@ -59,7 +64,7 @@ export function GiveDoseDialog({ task, onClose }: { task: Task | null; onClose: 
     setBusy(true);
     try {
       const extra = byWeight ? {
-        doses: Object.fromEntries(giving.filter((r) => r.wb).map((r) => [r.a!.id, r.dose])),
+        doses: Object.fromEntries(giving.filter((r) => r.wb && !r.tabRow).map((r) => [r.a!.id, r.dose])),
         weights: Object.fromEntries(giving.filter((r) => r.wb).map((r) => [r.a!.id, Number(r.w) || null])),
       } : {};
       if (byWeight) await saveDoseWeights(giving.filter((r) => r.wb).map((r) => ({ animalId: r.a!.id, lbs: r.w, date })), weightList);

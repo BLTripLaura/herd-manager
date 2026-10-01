@@ -11,8 +11,8 @@ export const weightOk = (lbs: any, lw: Weight | undefined, confirmed: boolean) =
  * Weight used for a dose. The stored weight is filled in, but it has to be confirmed
  * ("Still correct") or replaced with today's weight before the dose can be saved.
  */
-export function WeightCheck({ lbs, onLbs, lw, confirmed, onConfirmed, required = true, testId = "weight" }: {
-  lbs: any; onLbs: (v: string) => void; lw?: Weight; confirmed: boolean; onConfirmed: (v: boolean) => void; required?: boolean; testId?: string;
+export function WeightCheck({ lbs, onLbs, lw, confirmed, onConfirmed, required = true, testId = "weight", canTypeDose = true }: {
+  lbs: any; onLbs: (v: string) => void; lw?: Weight; confirmed: boolean; onConfirmed: (v: boolean) => void; required?: boolean; testId?: string; canTypeDose?: boolean;
 }) {
   const changed = weightChanged(lbs, lw);
   const ok = weightOk(lbs, lw, confirmed);
@@ -35,7 +35,7 @@ export function WeightCheck({ lbs, onLbs, lw, confirmed, onConfirmed, required =
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
         On file: {weighedText(lw)}.{" "}
-        {required ? (lw ? "Tap Still correct, or type today's weight and it will be saved. Typing the dose yourself also works." : "Enter the goat's weight to work out the dose (it will be saved), or type the dose yourself.") : "Optional here."}
+        {required ? (lw ? `Tap Still correct, or type today's weight and it will be saved.${canTypeDose ? " Typing the dose yourself also works." : ""}` : `Enter the goat's weight to work out the dose (it will be saved)${canTypeDose ? ", or type the dose yourself" : ""}.`) : "Optional here."}
       </p>
     </div>
   );

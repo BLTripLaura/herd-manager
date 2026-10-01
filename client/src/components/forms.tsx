@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useBarnHours } from "@/components/barn-hours";
 import {
-  useList, useSave, post, today, addDays, calcDoseMl, latestWeight, isWeightDosed, saveDoseWeights, DOSE_UNITS, GESTATION_DAYS, shortName, doseSchedule, dosesInDays, fmtShort, fmtTime, nowTime, repeatText, type RepeatUnit, type BarnHours,
+  useList, useSave, post, today, addDays, calcDoseMl, latestWeight, isWeightDosed, saveDoseWeights, tabletDose, tabletSizes, tabletFields, isTabletMg, type TabletDose, DOSE_UNITS, GESTATION_DAYS, shortName, doseSchedule, dosesInDays, fmtShort, fmtTime, nowTime, repeatText, type RepeatUnit, type BarnHours,
   type Animal, type Medication, type Breeding, type OutsideBuck, type Heat, HEAT_SIGNS, doseRuleText, heatDates, heatInterval, useRemove, fmtDate, ULTRASOUND_DAYS, PREKID_DAYS, RECHECK_DAYS, usDue, US_LABEL, goatName, regName, matchesAnimal, idMatch, isDrops, pillUnitOf, ORAL_UNITS, hasSide, SIDES, TUBE_AMOUNTS } from "@/lib/herd";
 import { ExternalLink, Plus, ChevronsUpDown } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -399,18 +399,53 @@ export function AnimalDialog({ open, onOpenChange, animal }: { open: boolean; on
 }
 
 /* ---------------- Medication ---------------- */
+/** Tablet dose worked out from weight (or per head), rounded to the tablet sizes on hand */
+export function TabletDoseBox({ dose, hasFirst, isFirst, onFirst, med }: { dose: TabletDose | null; hasFirst: boolean; isFirst: boolean; onFirst: (f: boolean) => void; med?: Medication }) {
+  const far = dose && Math.abs(dose.offPct) > 20;
+  return (
+    <div className="rounded-md border bg-card px-3 py-2" data-testid="box-tablet-dose-result">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-sm font-medium">Dose</span>
+        {hasFirst && (
+          <div className="flex overflow-hidden rounded-md border text-xs" role="group" aria-label="First or later dose">
+            <button type="button" onClick={() => onFirst(true)} className={`px-2.5 py-1 ${isFirst ? "bg-primary text-primary-foreground" : ""}`} data-testid="button-dose-first">First dose</button>
+            <button type="button" onClick={() => onFirst(false)} className={`border-l px-2.5 py-1 ${!isFirst ? "bg-primary text-primary-foreground" : ""}`} data-testid="button-dose-later">Later dose</button>
+          </div>
+        )}
+      </div>
+      {dose ? (
+        <>
+          <div className="mt-1 text-lg font-bold tabular-nums" data-testid="text-tablet-dose">{dose.text}</div>
+          <p className="text-xs text-muted-foreground">Works out to {dose.targetMg} mg{med ? ` (${doseRuleText(med)})` : ""}, rounded to the nearest the tablet sizes can make.</p>
+          {far && <p className="mt-1 text-xs font-semibold text-amber-800 dark:text-amber-200" data-testid="text-tablet-far">That's {Math.abs(dose.offPct)}% {dose.offPct > 0 ? "more" : "less"} than the worked-out dose. Check with your vet{!med?.tabletSplit && med?.pillForm !== "capsule" ? ", or allow splitting tablets on the medicine" : ""}.</p>}
+        </>
+      ) : <p className="mt-1 text-sm text-muted-foreground">{tabletSizes(med).length ? "Enter the weight to work out the dose." : "Add the tablet sizes on this medicine's card."}</p>}
+    </div>
+  );
+}
+
+const offTag = (d: TabletDose | null) => (d && Math.abs(d.offPct) > 20 ? <b className="text-amber-800 dark:text-amber-200"> ({Math.abs(d.offPct)}% {d.offPct > 0 ? "over" : "under"})</b> : null);
+
+/** Medication values typed in the form, shaped for the tablet math */
+const medPreview = (v: any) => ({ doseUnit: v.doseUnit, doseAmount: Number(v.doseAmount) || 0, firstDoseAmount: Number(v.firstDoseAmount) || null, dosePerLbs: Number(v.dosePerLbs) || null, tabletSizes: v.tabletSizes, tabletSplit: !!v.tabletSplit, pillForm: v.pillForm });
+
 export function MedDialog({ open, onOpenChange, med }: { open: boolean; onOpenChange: (o: boolean) => void; med?: Medication }) {
   const save = useSave("medications");
   const { toast } = useToast();
   const [v, set] = useFormState<any>(med ?? { category: "Antibiotic", doseUnit: "mg/lb", route: "SQ", milkWithdrawalDays: 0, meatWithdrawalDays: 0, onHandMl: 0, reorderAtMl: 0, vetConfirmed: false }, open);
   const needsConc = String(v.doseUnit).startsWith("mg");
   const dropsMed = v.doseUnit === "drops";
+  const tabMg = v.doseUnit === "tab-mg";
+  const preview = tabMg ? [20, 50, 100, 150].map((w) => ({ w, f: tabletDose(medPreview(v), Number(v.dosePerLbs) > 0 ? w : null, true), d: tabletDose(medPreview(v), Number(v.dosePerLbs) > 0 ? w : null, false) })) : [];
   const submit = async () => {
     if (!v.name?.trim() || v.doseAmount === undefined || v.doseAmount === "") return toast({ title: "Name and dose are required", variant: "destructive" });
+    if (tabMg && !tabletSizes(v).length) return toast({ title: "Enter the tablet sizes", description: "The mg in each tablet or capsule, e.g. 7.5, 15", variant: "destructive" });
     await save.mutateAsync({
       ...v, doseAmount: Number(v.doseAmount), concentration: num(v.concentration), repeatDays: num(v.repeatDays), repeatUnit: v.repeatUnit === "hours" ? "hours" : "days", repeatTimes: num(v.repeatTimes) ?? 0,
       milkWithdrawalDays: num(v.milkWithdrawalDays) ?? 0, meatWithdrawalDays: num(v.meatWithdrawalDays) ?? 0,
       onHandMl: num(v.onHandMl) ?? 0, reorderAtMl: num(v.reorderAtMl) ?? 0,
+      dosePerLbs: num(v.dosePerLbs), firstDoseAmount: num(v.firstDoseAmount), tabletSplit: !!v.tabletSplit,
+      tabletSizes: tabMg ? tabletSizes(v).slice().reverse().join(", ") : v.tabletSizes ?? null, pillForm: v.pillForm === "capsule" ? "capsule" : "tablet",
     });
     toast({ title: med ? "Medication updated" : "Medication added" });
     onOpenChange(false);
@@ -426,8 +461,30 @@ export function MedDialog({ open, onOpenChange, med }: { open: boolean; onOpenCh
           <Field label="Product name" className="col-span-2"><Input value={v.name ?? ""} onChange={(e) => set("name")(e.target.value)} data-testid="input-med-name" /></Field>
           <Field label="Category"><Pick value={v.category} onChange={set("category")} options={["Antibiotic", "Dewormer", "Vaccine", "Supplement", "Anti-inflammatory", "Other"].map((x) => ({ value: x, label: x }))} /></Field>
           <Field label="Route"><Pick value={v.route} onChange={set("route")} options={["SQ", "IM", "IV", "Oral", "Topical", "Eye", "Intramammary"].map((x) => ({ value: x, label: x }))} /></Field>
-          <Field label={dropsMed ? "Drops per dose" : v.doseUnit === "capsules" ? "Capsules per dose" : v.doseUnit === "tablets" ? "Tablets per dose" : v.doseUnit === "tubes" ? "Tubes per side (1 or 0.5)" : "Dose amount"}><Input type="number" inputMode="decimal" step="any" value={v.doseAmount ?? ""} onChange={(e) => set("doseAmount")(e.target.value)} data-testid="input-dose" /></Field>
-          <Field label="Dose basis"><Pick value={v.doseUnit} onChange={set("doseUnit")} testId="select-dose-unit" options={DOSE_UNITS.filter((u) => u.value === v.doseUnit || (["capsules", "tablets"].includes(u.value) ? v.route === "Oral" : u.value === "tubes" ? v.route === "Intramammary" : true))} /></Field>
+          <Field label={tabMg ? (Number(v.firstDoseAmount) > 0 ? "Later doses (mg)" : "Dose (mg)") : dropsMed ? "Drops per dose" : v.doseUnit === "capsules" ? "Capsules per dose" : v.doseUnit === "tablets" ? "Tablets per dose" : v.doseUnit === "tubes" ? "Tubes per side (1 or 0.5)" : "Dose amount"}><Input type="number" inputMode="decimal" step="any" value={v.doseAmount ?? ""} onChange={(e) => set("doseAmount")(e.target.value)} data-testid="input-dose" /></Field>
+          <Field label="Dose basis"><Pick value={v.doseUnit} onChange={set("doseUnit")} testId="select-dose-unit" options={DOSE_UNITS.filter((u) => u.value === v.doseUnit || (["capsules", "tablets", "tab-mg"].includes(u.value) ? v.route === "Oral" : u.value === "tubes" ? v.route === "Intramammary" : true))} /></Field>
+          {tabMg && (
+            <div className="col-span-2 grid grid-cols-2 gap-3 rounded-md border bg-muted/30 p-3" data-testid="box-tablet-dose">
+              <Field label="Given as"><Pick value={v.pillForm === "capsule" ? "capsule" : "tablet"} onChange={set("pillForm")} testId="select-pill-form" options={[{ value: "tablet", label: "Tablets" }, { value: "capsule", label: "Capsules" }]} /></Field>
+              <Field label="Sizes on hand (mg each)" hint="e.g. 7.5, 15"><Input value={v.tabletSizes ?? ""} onChange={(e) => set("tabletSizes")(e.target.value)} placeholder="7.5, 15" data-testid="input-tablet-sizes" /></Field>
+              <Field label="Per how many lb" hint="Blank = the same dose per head"><Input type="number" inputMode="decimal" step="any" value={v.dosePerLbs ?? ""} onChange={(e) => set("dosePerLbs")(e.target.value)} placeholder="e.g. 2.25" data-testid="input-dose-per-lbs" /></Field>
+              <Field label="First dose (mg)" hint="Only if the first dose is different"><Input type="number" inputMode="decimal" step="any" value={v.firstDoseAmount ?? ""} onChange={(e) => set("firstDoseAmount")(e.target.value)} data-testid="input-first-dose" /></Field>
+              {v.pillForm !== "capsule" && (
+                <div className="col-span-2 flex items-center justify-between rounded-md border bg-background px-3 py-2">
+                  <span className="text-sm">Tablets can be split in half</span>
+                  <Switch checked={!!v.tabletSplit} onCheckedChange={set("tabletSplit")} data-testid="switch-tablet-split" />
+                </div>
+              )}
+              <p className="col-span-2 text-xs text-muted-foreground">Each dose is worked out{Number(v.dosePerLbs) > 0 ? " from the goat's weight" : ""}, then rounded to the nearest amount the sizes above can make (ties round down).</p>
+              {preview.some((p) => p.d) && (
+                <ul className="col-span-2 space-y-0.5 text-xs" data-testid="list-tablet-preview">
+                  {(Number(v.dosePerLbs) > 0 ? preview : preview.slice(0, 1)).map((p) => (
+                    <li key={p.w} className="tabular-nums">{Number(v.dosePerLbs) > 0 ? <b>{p.w} lb: </b> : <b>Each goat: </b>}{Number(v.firstDoseAmount) > 0 ? <>first {p.f?.text ?? "—"}{offTag(p.f)}; later {p.d?.text ?? "—"}{offTag(p.d)}</> : <>{p.d?.text ?? "—"}{offTag(p.d)}</>}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
           {needsConc && <Field label="Strength (mg per mL)" className="col-span-2"><Input type="number" inputMode="decimal" step="any" value={v.concentration ?? ""} onChange={(e) => set("concentration")(e.target.value)} data-testid="input-concentration" /></Field>}
           <Field label="Milk withdrawal (days)"><Input type="number" inputMode="numeric" value={v.milkWithdrawalDays ?? ""} onChange={(e) => set("milkWithdrawalDays")(e.target.value)} data-testid="input-milk-wd" /></Field>
           <Field label="Meat withdrawal (days)"><Input type="number" inputMode="numeric" value={v.meatWithdrawalDays ?? ""} onChange={(e) => set("meatWithdrawalDays")(e.target.value)} data-testid="input-meat-wd" /></Field>
@@ -458,6 +515,7 @@ export function MedDialog({ open, onOpenChange, med }: { open: boolean; onOpenCh
 /* ---------------- Single treatment ---------------- */
 export function TreatDialog({ open, onOpenChange, animal: fixed }: { open: boolean; onOpenChange: (o: boolean) => void; animal?: Animal }) {
   const { data: meds = [] } = useList("medications");
+  const { data: treatList = [] } = useList("treatments");
   const { data: weights = [] } = useList("weights");
   const { data: animals = [] } = useList("animals");
   const [saving, setSaving] = useState(false);
@@ -491,7 +549,14 @@ export function TreatDialog({ open, onOpenChange, animal: fixed }: { open: boole
   // The weight has to be checked only when the dose saved is the one worked out from weight (in mL).
   // Tablets/capsules, udder tubes, or a dose typed in by hand don't need it.
   const autoDose = v.doseMl === "" || v.doseMl == null || Number(v.doseMl) === calcDoseMl(med, Number(v.weightLbs));
-  const needW = isWeightDosed(med) && !udder && !(oral && v.doseUnit && v.doseUnit !== "mL") && autoDose;
+  const tab = isTabletMg(med);
+  // Tablets in mg: first (loading) dose unless this goat had this medicine in the last week
+  const hadRecently = !!(med && animal && treatList.some((t) => t.animalId === animal.id && t.medicationId === med.id && t.date < v.date && t.date >= addDays(v.date, -7)));
+  const hasFirst = tab && Number(med?.firstDoseAmount) > 0 && med?.firstDoseAmount !== med?.doseAmount;
+  const isFirst = hasFirst && (v.firstDose ?? !hadRecently);
+  const tdose = tab ? tabletDose(med, v.weightLbs, !!isFirst) : null;
+  useEffect(() => { setV((p: any) => (p.firstDose === undefined ? p : { ...p, firstDose: undefined })); }, [v.medicationId, animal?.id]); // eslint-disable-line
+  const needW = tab ? isWeightDosed(med) : isWeightDosed(med) && !udder && !(oral && v.doseUnit && v.doseUnit !== "mL") && autoDose;
   useEffect(() => {
     if (med) setV((p: any) => ({ ...p, doseMl: calcDoseMl(med, Number(p.weightLbs)) ?? "", route: med.route }));
   }, [v.medicationId, v.weightLbs]); // eslint-disable-line
@@ -504,6 +569,7 @@ export function TreatDialog({ open, onOpenChange, animal: fixed }: { open: boole
     const times = Math.max(0, Math.floor(Number(v.times) || 0));
     const every = Math.floor(Number(v.every) || 0);
     if (times > 0 && every < 1) return toast({ title: "Enter the time between doses", variant: "destructive" });
+    if (tab && !tdose) return toast({ title: tabletSizes(med).length ? "Enter the goat's weight" : "Add the tablet sizes to this medicine", description: tabletSizes(med).length ? "The tablet dose is worked out from weight." : "Edit it in the Medicine Cabinet.", variant: "destructive" });
     if (needW && !weightOk(v.weightLbs, lw, wOk)) return toast({ title: "Check the weight first", description: lw ? `Tap Still correct if ${lw.lbs} lb is right, or type today's weight. Or type the dose yourself.` : "Enter the goat's weight to work out the dose, or type the dose yourself.", variant: "destructive" });
     const unit: RepeatUnit = v.unit === "hours" ? "hours" : "days";
     const plan = repeatPlan(v.date, String(times), String(every), unit, v.time, v.barnOn ? barnHours : null).slice(1);
@@ -514,7 +580,7 @@ export function TreatDialog({ open, onOpenChange, animal: fixed }: { open: boole
         treatments: [{
           animalId: animal.id, medicationId: med.id, medName: med.name, date: v.date, time: v.time || null, weightLbs: num(v.weightLbs), tempF: num(v.tempF),
           side: sided ? v.side || null : null,
-          ...(udder ? { doseMl: null, pillCount: Number(v.tubes) || 1, pillUnit: "tube" } : isDrops(med) ? { doseMl: null, drops: num(v.doseMl) } : oral && v.doseUnit !== "mL" ? { doseMl: null, pillCount: num(v.doseMl), pillUnit: v.doseUnit } : { doseMl: num(v.doseMl) }),
+          ...(tdose ? tabletFields(tdose) : udder ? { doseMl: null, pillCount: Number(v.tubes) || 1, pillUnit: "tube" } : isDrops(med) ? { doseMl: null, drops: num(v.doseMl) } : oral && v.doseUnit !== "mL" ? { doseMl: null, pillCount: num(v.doseMl), pillUnit: v.doseUnit } : { doseMl: num(v.doseMl) }),
           route: v.route, reason: v.reason, givenBy: v.givenBy, notes: v.notes,
           milkClearDate: addDays(v.date, med.milkWithdrawalDays ?? 0), meatClearDate: addDays(v.date, med.meatWithdrawalDays ?? 0),
           nextDoseDate: null,
@@ -544,8 +610,10 @@ export function TreatDialog({ open, onOpenChange, animal: fixed }: { open: boole
           </Field>
           <Field label="Date"><Input type="date" value={v.date} onChange={(e) => set("date")(e.target.value)} /></Field>
           <Field label="Time given"><Input type="time" value={v.time ?? ""} onChange={(e) => set("time")(e.target.value)} data-testid="input-treat-time" /></Field>
-          {animal && <div className="col-span-2"><WeightCheck lbs={v.weightLbs} onLbs={(x) => { setWTyped(true); set("weightLbs")(x); }} lw={lw} confirmed={wOk} onConfirmed={setWOk} required={needW} testId="treat-weight" /></div>}
-          {udder ? (
+          {animal && <div className="col-span-2"><WeightCheck lbs={v.weightLbs} onLbs={(x) => { setWTyped(true); set("weightLbs")(x); }} lw={lw} confirmed={wOk} onConfirmed={setWOk} required={needW} testId="treat-weight" canTypeDose={!tab} /></div>}
+          {tab ? (
+            <div className="col-span-2"><TabletDoseBox dose={tdose} hasFirst={!!hasFirst} isFirst={!!isFirst} onFirst={(f) => set("firstDose")(f)} med={med} /></div>
+          ) : udder ? (
             <Field label="Dose"><Pick value={v.tubes ?? "1"} onChange={set("tubes")} testId="select-treat-tubes" options={TUBE_AMOUNTS} /></Field>
           ) : (
           <Field label={isDrops(med) ? "Drops" : oral ? "Dose" : "Dose (mL)"} className={oral && !isDrops(med) ? "col-span-2" : undefined} hint={isDrops(med) ? "Drops per dose. Change it if needed." : oral && v.doseUnit && v.doseUnit !== "mL" ? `How many ${v.doseUnit}s (½ = 0.5)` : pillUnitOf(med) ? `${pillUnitOf(med) === "capsule" ? "Capsules" : "Tablets"} per dose. Change it if needed.` : med ? "Calculated from weight — edit if needed" : undefined}>

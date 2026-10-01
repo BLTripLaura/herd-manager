@@ -82,6 +82,12 @@ export const medications = sqliteTable("medications", {
   reorderAtMl: doublePrecision("reorder_at_ml").default(0),
   vetConfirmed: boolean("vet_confirmed").default(false),
   notes: text("notes"),
+  // Tablets/capsules dosed in mg (dose_unit "tab-mg"): sizes on hand, e.g. "7.5, 15"
+  tabletSizes: text("tablet_sizes"),
+  tabletSplit: boolean("tablet_split").default(false), // tablets can be cut in half
+  dosePerLbs: doublePrecision("dose_per_lbs"), // mg dose is per this many lb (blank = per head)
+  firstDoseAmount: doublePrecision("first_dose_amount"), // a different first (loading) dose, mg
+  pillForm: text("pill_form").default("tablet"), // tablet | capsule
 });
 
 export const treatments = sqliteTable("treatments", {
@@ -97,6 +103,8 @@ export const treatments = sqliteTable("treatments", {
   drops: integer("drops"), // eye meds: drops given (dose_ml stays empty)
   pillCount: doublePrecision("pill_count"), // oral meds given as capsules or tablets (can be ½)
   pillUnit: text("pill_unit"), // capsule | tablet | tube (intramammary, per side)
+  doseMg: doublePrecision("dose_mg"), // tablet doses: the mg given
+  doseDetail: text("dose_detail"), // tablet doses: "22.5 mg: 1 × 15 mg + 1 × 7.5 mg tablets"
   side: text("side"), // eye and udder treatments: Left | Right | Both
   route: text("route"),
   reason: text("reason"),
