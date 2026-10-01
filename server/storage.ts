@@ -293,7 +293,8 @@ export class DatabaseStorage {
           animalId: aid, medicationId: base.medicationId, medName: base.medName, date, time: time || null, weightLbs: Number(weights[aid]) > 0 ? Number(weights[aid]) : base.weightLbs, tempF: Number(temps[aid]) || null, doseMl: Number(doses[aid]) > 0 ? Math.round(Number(doses[aid]) * 10) / 10 : base.doseMl, drops: base.drops ?? null, pillCount: base.pillCount ?? null, pillUnit: base.pillUnit ?? null, side: base.side ?? null,
           route: base.route, reason: base.reason, givenBy: givenBy || base.givenBy, batchId: base.batchId,
           doseNo: task.doseNo, doseTotal: task.doseTotal, notes: extra.note ? String(extra.note).slice(0, 500) : null,
-          milkClearDate: addDaysIso(date, med?.milkWithdrawalDays ?? 0), meatClearDate: addDaysIso(date, med?.meatWithdrawalDays ?? 0),
+          // "Other" treatments (no medicine) have no withdrawal
+          milkClearDate: med ? addDaysIso(date, med.milkWithdrawalDays ?? 0) : null, meatClearDate: med ? addDaysIso(date, med.meatWithdrawalDays ?? 0) : null,
           nextDoseDate: null,
           ...(tabs.doseDetail ? { ...tabs, weightLbs: tabW ?? base.weightLbs ?? null } : base.doseDetail ? { doseMg: base.doseMg ?? null, doseDetail: base.doseDetail } : {}),
         });
