@@ -60,7 +60,7 @@ export default function Batch() {
   const { hours: barnHours } = useBarnHours();
   useEffect(() => {
     setBUnit(pillUnitOf(med) ?? "mL"); setBSide(null); setBTubes(med?.doseUnit === "tubes" && med.doseAmount === 0.5 ? "0.5" : "1");
-    if (med) { setRTimes(String(med.repeatTimes ?? (med.repeatDays ? 1 : 0))); setREvery(med.repeatDays ? String(med.repeatDays) : ""); setRUnit(med.repeatUnit === "hours" ? "hours" : "days"); setBarnOn(med.repeatUnit === "hours" && ((med.repeatDays ?? 99) <= 2 || med.repeatDays === 12)); }
+    if (med) { setROngoing(!!med.repeatOngoing && !!med.repeatDays); setRTimes(String(med.repeatTimes ?? (med.repeatDays ? 1 : 0))); setREvery(med.repeatDays ? String(med.repeatDays) : ""); setRUnit(med.repeatUnit === "hours" ? "hours" : "days"); setBarnOn(med.repeatUnit === "hours" && ((med.repeatDays ?? 99) <= 2 || med.repeatDays === 12)); }
   }, [medId]); // eslint-disable-line
   useEffect(() => {
     setRows((prev) => {

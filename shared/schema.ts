@@ -76,6 +76,7 @@ export const medications = sqliteTable("medications", {
   repeatDays: integer("repeat_days"), // interval between doses, in repeatUnit
   repeatUnit: text("repeat_unit").default("days"), // days | hours
   repeatTimes: integer("repeat_times").default(0), // how many repeat doses after the first
+  repeatOngoing: boolean("repeat_ongoing").default(false), // repeat until resolved by default (instead of a set number)
   milkWithdrawalDays: integer("milk_withdrawal_days").default(0),
   meatWithdrawalDays: integer("meat_withdrawal_days").default(0),
   onHandMl: doublePrecision("on_hand_ml").default(0),

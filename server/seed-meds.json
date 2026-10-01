@@ -393,7 +393,8 @@
   "dose_per_lbs": 2.20462,
   "tablet_sizes": "7.5, 15",
   "tablet_split": false,
-  "pill_form": "tablet"
+  "pill_form": "tablet",
+  "repeat_ongoing": true
  },
  {
   "name": "NeoPolyBac",

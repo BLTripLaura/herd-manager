@@ -15,14 +15,15 @@ async function build() {
   await pg.unsafe(`alter table herd.medications add column if not exists tablet_sizes text, add column if not exists tablet_split boolean default false,
     add column if not exists dose_per_lbs double precision, add column if not exists first_dose_amount double precision, add column if not exists pill_form text default 'tablet';
   alter table herd.treatments add column if not exists dose_mg double precision, add column if not exists dose_detail text;
-  alter table herd.tasks add column if not exists repeat_unit text default 'days', add column if not exists reeval boolean default false;`);
+  alter table herd.tasks add column if not exists repeat_unit text default 'days', add column if not exists reeval boolean default false;
+  alter table herd.medications add column if not exists repeat_ongoing boolean default false;`);
   const n = await get<{ n: number }>("SELECT count(*)::int AS n FROM medications");
   const seeded = await get<{ value: string }>("SELECT value FROM app_settings WHERE key = 'medsSeeded'");
   if (!n?.n && !seeded) {
     for (const m of seedMeds as any[]) {
       await run(
-        "INSERT INTO medications (name, category, concentration, dose_amount, dose_unit, route, repeat_days, repeat_unit, repeat_times, milk_withdrawal_days, meat_withdrawal_days, on_hand_ml, reorder_at_ml, vet_confirmed, notes, tablet_sizes, tablet_split, dose_per_lbs, first_dose_amount, pill_form) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, false, ?, ?, ?, ?, ?, ?)",
-        m.name, m.category, m.concentration, m.dose_amount, m.dose_unit, m.route, m.repeat_days, m.repeat_unit ?? "days", m.repeat_times ?? 0, m.milk_withdrawal_days ?? 0, m.meat_withdrawal_days ?? 0, m.notes, m.tablet_sizes ?? null, m.tablet_split ?? false, m.dose_per_lbs ?? null, m.first_dose_amount ?? null, m.pill_form ?? "tablet",
+        "INSERT INTO medications (name, category, concentration, dose_amount, dose_unit, route, repeat_days, repeat_unit, repeat_times, milk_withdrawal_days, meat_withdrawal_days, on_hand_ml, reorder_at_ml, vet_confirmed, notes, tablet_sizes, tablet_split, dose_per_lbs, first_dose_amount, pill_form, repeat_ongoing) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, false, ?, ?, ?, ?, ?, ?, ?)",
+        m.name, m.category, m.concentration, m.dose_amount, m.dose_unit, m.route, m.repeat_days, m.repeat_unit ?? "days", m.repeat_times ?? 0, m.milk_withdrawal_days ?? 0, m.meat_withdrawal_days ?? 0, m.notes, m.tablet_sizes ?? null, m.tablet_split ?? false, m.dose_per_lbs ?? null, m.first_dose_amount ?? null, m.pill_form ?? "tablet", m.repeat_ongoing ?? false,
       );
     }
   }

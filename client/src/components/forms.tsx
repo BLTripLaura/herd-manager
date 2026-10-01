@@ -462,6 +462,7 @@ export function MedDialog({ open, onOpenChange, med }: { open: boolean; onOpenCh
   const preview = tabMg ? [20, 50, 100, 150].map((w) => ({ w, f: tabletDose(medPreview(v), Number(v.dosePerLbs) > 0 ? w : null, true), d: tabletDose(medPreview(v), Number(v.dosePerLbs) > 0 ? w : null, false) })) : [];
   const submit = async () => {
     if (!v.name?.trim() || v.doseAmount === undefined || v.doseAmount === "") return toast({ title: "Name and dose are required", variant: "destructive" });
+    if (v.repeatOngoing && !(Number(v.repeatDays) > 0)) return toast({ title: "Enter the time between doses", description: "Until resolved needs to know how often to repeat.", variant: "destructive" });
     if (tabMg && !tabletSizes(v).length) return toast({ title: "Enter the tablet sizes", description: "The mg in each tablet or capsule, e.g. 7.5, 15", variant: "destructive" });
     await save.mutateAsync({
       ...v, doseAmount: Number(v.doseAmount), concentration: num(v.concentration), repeatDays: num(v.repeatDays), repeatUnit: v.repeatUnit === "hours" ? "hours" : "days", repeatTimes: num(v.repeatTimes) ?? 0,
@@ -517,7 +518,13 @@ export function MedDialog({ open, onOpenChange, med }: { open: boolean; onOpenCh
           {needsConc && <Field label="Strength (mg per mL)" className="col-span-2"><Input type="number" inputMode="decimal" step="any" value={v.concentration ?? ""} onChange={(e) => set("concentration")(e.target.value)} data-testid="input-concentration" /></Field>}
           <Field label="Milk withdrawal (days)"><Input type="number" inputMode="numeric" value={v.milkWithdrawalDays ?? ""} onChange={(e) => set("milkWithdrawalDays")(e.target.value)} data-testid="input-milk-wd" /></Field>
           <Field label="Meat withdrawal (days)"><Input type="number" inputMode="numeric" value={v.meatWithdrawalDays ?? ""} onChange={(e) => set("meatWithdrawalDays")(e.target.value)} data-testid="input-meat-wd" /></Field>
-          <Field label="Usual repeats" hint="Extra doses after the first"><Input type="number" inputMode="numeric" value={v.repeatTimes ?? ""} onChange={(e) => set("repeatTimes")(e.target.value)} data-testid="input-med-repeat-times" /></Field>
+          {v.repeatOngoing
+            ? <Field label="Usual repeats" hint="Keeps going until you mark it resolved"><div className="flex h-9 items-center text-sm font-medium">Until resolved</div></Field>
+            : <Field label="Usual repeats" hint="Extra doses after the first"><Input type="number" inputMode="numeric" value={v.repeatTimes ?? ""} onChange={(e) => set("repeatTimes")(e.target.value)} data-testid="input-med-repeat-times" /></Field>}
+          <label className="col-span-2 flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm" data-testid="label-med-ongoing">
+            <span>Repeat until resolved by default<span className="block text-xs text-muted-foreground">Log treatment starts on "Until resolved" for this medicine</span></span>
+            <Switch checked={!!v.repeatOngoing} onCheckedChange={(c) => set("repeatOngoing")(c)} data-testid="switch-med-ongoing" />
+          </label>
           <Field label="Time between doses" hint={v.repeatDays ? repeatText(Number(v.repeatDays), v.repeatUnit) : "e.g., 12 hours = twice a day"}>
             <div className="flex gap-1.5">
               <Input type="number" inputMode="numeric" className="min-w-0" value={v.repeatDays ?? ""} onChange={(e) => set("repeatDays")(e.target.value)} data-testid="input-med-repeat-days" />
@@ -590,7 +597,7 @@ export function TreatDialog({ open, onOpenChange, animal: fixed }: { open: boole
     if (med) setV((p: any) => ({ ...p, doseMl: calcDoseMl(med, Number(p.weightLbs)) ?? "", route: med.route }));
   }, [v.medicationId, v.weightLbs]); // eslint-disable-line
   useEffect(() => {
-    if (med) setV((p: any) => ({ ...p, doseUnit: pillUnitOf(med) ?? "mL", tubes: med.doseUnit === "tubes" && med.doseAmount === 0.5 ? "0.5" : "1", side: "", times: String(med.repeatTimes ?? (med.repeatDays ? 1 : 0)), every: med.repeatDays ? String(med.repeatDays) : "", unit: med.repeatUnit === "hours" ? "hours" : "days", barnOn: med.repeatUnit === "hours" && ((med.repeatDays ?? 99) <= 2 || med.repeatDays === 12), time: p.time || nowTime() }));
+    if (med) setV((p: any) => ({ ...p, doseUnit: pillUnitOf(med) ?? "mL", tubes: med.doseUnit === "tubes" && med.doseAmount === 0.5 ? "0.5" : "1", side: "", times: String(med.repeatTimes ?? (med.repeatDays ? 1 : 0)), ongoing: !!med.repeatOngoing && !!med.repeatDays, every: med.repeatDays ? String(med.repeatDays) : "", unit: med.repeatUnit === "hours" ? "hours" : "days", barnOn: med.repeatUnit === "hours" && ((med.repeatDays ?? 99) <= 2 || med.repeatDays === 12), time: p.time || nowTime() }));
   }, [v.medicationId]); // eslint-disable-line
   const submit = async () => {
     if (!animal) return toast({ title: "Pick a goat", variant: "destructive" });
