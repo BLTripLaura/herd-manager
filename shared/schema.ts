@@ -189,7 +189,9 @@ export const tasks = sqliteTable("tasks", {
   drops: integer("drops"),
   route: text("route"),
   notes: text("notes"),
-  repeatEvery: integer("repeat_every"), // days; when done or skipped, the next one is added
+  repeatEvery: integer("repeat_every"), // days (or hours, see repeatUnit); when done or skipped, the next one is added
+  repeatUnit: text("repeat_unit").default("days"), // "days" | "hours"
+  reeval: boolean("reeval").default(false), // ask to re-evaluate the goat before this dose (continue or stop)
   source: text("source"), // e.g. EK-REM-70806
 });
 

@@ -14,7 +14,8 @@ async function build() {
   // Columns added after the first release (safe to run every start)
   await pg.unsafe(`alter table herd.medications add column if not exists tablet_sizes text, add column if not exists tablet_split boolean default false,
     add column if not exists dose_per_lbs double precision, add column if not exists first_dose_amount double precision, add column if not exists pill_form text default 'tablet';
-  alter table herd.treatments add column if not exists dose_mg double precision, add column if not exists dose_detail text;`);
+  alter table herd.treatments add column if not exists dose_mg double precision, add column if not exists dose_detail text;
+  alter table herd.tasks add column if not exists repeat_unit text default 'days', add column if not exists reeval boolean default false;`);
   const n = await get<{ n: number }>("SELECT count(*)::int AS n FROM medications");
   const seeded = await get<{ value: string }>("SELECT value FROM app_settings WHERE key = 'medsSeeded'");
   if (!n?.n && !seeded) {

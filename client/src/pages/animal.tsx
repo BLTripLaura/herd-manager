@@ -19,12 +19,13 @@ import { CareTab } from "@/components/batch-care";
 import { PedigreeChart } from "@/components/pedigree";
 import { RegistrationPapers } from "@/components/papers";
 import { MilkBadge, MilkStatusDialog, LactationList } from "@/components/milk-status";
-import { isCalfPro, useList, useSave, useRemove, post, type Task, latestWeight, activeHolds, age, fmtDate, fmtShort, today, relDays, shortName, fmtChip, HORN_LABEL, progenyOf, findByName, normName, daysBetween, heatWatch, heatDates, heatInterval, HEAT_TYPICAL, type Breeding, type Animal, type Heat, usDue, prekidDue, daysInMilk , nextDoses, doseLate, fmtTime, goatName, regName, doseText, everyText, taskDoseText } from "@/lib/herd";
+import { isCalfPro, useList, useSave, useRemove, post, type Task, latestWeight, activeHolds, age, fmtDate, fmtShort, today, relDays, shortName, fmtChip, HORN_LABEL, progenyOf, findByName, normName, daysBetween, heatWatch, heatDates, heatInterval, HEAT_TYPICAL, type Breeding, type Animal, type Heat, usDue, prekidDue, daysInMilk , nextDoses, doseLate, fmtTime, goatName, regName, doseText, everyText, taskDoseText, doseOfText } from "@/lib/herd";
 
 function Info({ label, value }: { label: string; value: React.ReactNode }) {
   return <div><div className="text-xs text-muted-foreground">{label}</div><div className="break-words text-sm font-medium">{value || "—"}</div></div>;
 }
 
+const cap = (x: string) => x[0].toUpperCase() + x.slice(1);
 export default function AnimalPage() {
   const [, params] = useRoute("/animal/:id");
   const id = Number(params?.id);
@@ -211,7 +212,7 @@ export default function AnimalPage() {
               <ul className="divide-y">
                 {nextDoses(scheduled).map(({ task: k, remaining, last }) => (
                   <li key={k.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                    <div className="min-w-0"><div className="truncate text-sm font-medium">{k.doseNo ? `Dose ${k.doseNo} of ${k.doseTotal} · ` : ""}{k.title.split(" — ")[0]}{k.doseNo ? "" : [taskDoseText(k), everyText(k.repeatEvery)].filter(Boolean).map((x) => ` · ${x}`).join("")}</div><div className={`text-xs ${doseLate(k) ? "font-semibold text-destructive" : "text-muted-foreground"}`}>{fmtShort(k.dueDate)}{k.dueTime ? ` ${fmtTime(k.dueTime)}` : ""} · {doseLate(k) ? "overdue" : relDays(k.dueDate)}{remaining ? ` · then ${remaining} more, last ${fmtShort(last.dueDate)}${last.dueTime ? ` ${fmtTime(last.dueTime)}` : ""}` : ""}</div></div>
+                    <div className="min-w-0"><div className="truncate text-sm font-medium">{k.doseNo ? `${cap(doseOfText(k))} · ` : ""}{k.title.split(" — ")[0]}{k.doseNo ? "" : [taskDoseText(k), everyText(k.repeatEvery)].filter(Boolean).map((x) => ` · ${x}`).join("")}</div><div className={`text-xs ${doseLate(k) ? "font-semibold text-destructive" : "text-muted-foreground"}`}>{fmtShort(k.dueDate)}{k.dueTime ? ` ${fmtTime(k.dueTime)}` : ""} · {doseLate(k) ? "overdue" : relDays(k.dueDate)}{remaining ? ` · then ${remaining} more, last ${fmtShort(last.dueDate)}${last.dueTime ? ` ${fmtTime(last.dueTime)}` : ""}` : ""}</div></div>
                     <Button size="sm" variant={k.dueDate <= today() ? "default" : "outline"} onClick={() => setGiving(k)} data-testid={`button-give-${k.id}`}>{k.dueDate <= today() ? "Give" : "Log"}</Button>
                   </li>
                 ))}

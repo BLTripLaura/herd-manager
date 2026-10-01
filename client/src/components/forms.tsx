@@ -160,18 +160,19 @@ export function repeatPlan(start: string, times: string, every: string, unit: Re
   const d = Math.max(0, Math.floor(Number(every) || 0));
   return doseSchedule(start, n, d, unit, time || "08:00", unit === "hours" ? barn : null);
 }
-export function RepeatFields({ start, times, every, unit, time, onTimes, onEvery, onUnit, onTime, barnOn, onBarnOn }: {
+export function RepeatFields({ start, times, every, unit, time, onTimes, onEvery, onUnit, onTime, barnOn, onBarnOn, ongoing = false, onOngoing, reeval = false, onReeval }: {
   start: string; times: string; every: string; unit: RepeatUnit; time: string;
   onTimes: (v: string) => void; onEvery: (v: string) => void; onUnit: (v: RepeatUnit) => void; onTime: (v: string) => void;
   barnOn: boolean; onBarnOn: (v: boolean) => void;
+  ongoing?: boolean; onOngoing?: (v: boolean) => void; reeval?: boolean; onReeval?: (v: boolean) => void;
 }) {
-  const n = Math.max(0, Math.min(1000, Math.floor(Number(times) || 0)));
+  const n = ongoing ? 1 : Math.max(0, Math.min(1000, Math.floor(Number(times) || 0)));
   const d = Math.max(0, Math.floor(Number(every) || 0));
   const hours = unit === "hours";
   const { hours: barn, save: saveBarn } = useBarnHours();
   const [editBarn, setEditBarn] = useState(false);
   const useBarn = hours && barnOn;
-  const dates = repeatPlan(start, times, every, unit, time, useBarn ? barn : null);
+  const dates = repeatPlan(start, ongoing ? "1" : times, every, unit, time, useBarn ? barn : null);
   const [runDays, setRunDays] = useState("");
   // "for X days": count the doses that fit in X days (skipping the night when barn hours are on), minus the first one
   const runFor = (x: string, bh: BarnHours | null = useBarn ? barn : null, ev = d, un = unit) => {
@@ -184,6 +185,7 @@ export function RepeatFields({ start, times, every, unit, time, onTimes, onEvery
   const pick = (p: (typeof PRESETS)[number]) => {
     onUnit(p.unit); onEvery(String(p.every));
     const on = p.unit === "hours" && (p.every <= 2 || p.every === 12); onBarnOn(on); // hourly, every-2-hour and twice-daily treatments stay inside barn hours
+    if (ongoing) return;
     if (runDays) runFor(runDays, on ? barn : null, p.every, p.unit);
     else if (!n) onTimes(p.unit === "hours" ? String(Math.max(1, dosesInDays(start, time || "08:00", 1, p.every, "hours", on ? barn : null) - 1)) : "2");
   };
@@ -191,7 +193,15 @@ export function RepeatFields({ start, times, every, unit, time, onTimes, onEvery
   const shown = dates.length > 8 ? [...dates.slice(0, 6).map(fmt), "…", fmt(dates[dates.length - 1])] : dates.map(fmt);
   return (
     <div className="rounded-md border p-3" data-testid="repeat-fields">
-      <div className="mb-2 text-xs font-semibold text-muted-foreground">Repeat doses</div>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs font-semibold text-muted-foreground">Repeat doses</span>
+        {onOngoing && (
+          <div className="inline-flex rounded-md border p-0.5 text-xs" role="group" aria-label="How long to repeat">
+            <button type="button" onClick={() => onOngoing(false)} className={`rounded px-2 py-1 font-semibold ${!ongoing ? "bg-primary text-primary-foreground" : ""}`} data-testid="button-repeat-count">Set number</button>
+            <button type="button" onClick={() => { onOngoing(true); if (!(d > 0)) { onEvery("1"); onUnit("days"); } }} className={`rounded px-2 py-1 font-semibold ${ongoing ? "bg-primary text-primary-foreground" : ""}`} data-testid="button-repeat-ongoing">Until resolved</button>
+          </div>
+        )}
+      </div>
       <div className="mb-2 flex flex-wrap gap-1.5">
         {PRESETS.map((p) => {
           const on = d === p.every && unit === p.unit && n > 0;
@@ -199,9 +209,10 @@ export function RepeatFields({ start, times, every, unit, time, onTimes, onEvery
         })}
       </div>
       <div className="flex flex-wrap items-center gap-2 text-sm">
+        {ongoing ? <span>Repeat until resolved,</span> : <>
         <span>Repeat</span>
         <Input type="number" inputMode="numeric" min={0} className="h-9 w-16 px-1 text-center tabular-nums" value={times} onChange={(e) => { onTimes(e.target.value); setRunDays(""); }} data-testid="input-repeat-times" aria-label="Number of repeat doses" />
-        <span>more time{n === 1 ? "" : "s"},</span>
+        <span>more time{n === 1 ? "" : "s"},</span></>}
         <span className="inline-flex items-center gap-2 whitespace-nowrap">every
         <Input type="number" inputMode="numeric" min={1} className="h-9 w-14 text-center tabular-nums" value={every} onChange={(e) => onEvery(e.target.value)} data-testid="input-repeat-every" aria-label="Time between doses" />
         <select value={unit} onChange={(e) => onUnit(e.target.value as RepeatUnit)} className="h-9 rounded-md border bg-background px-2 text-sm" aria-label="Days or hours" data-testid="select-repeat-unit">
@@ -210,9 +221,9 @@ export function RepeatFields({ start, times, every, unit, time, onTimes, onEvery
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
         {hours && <><span>First dose at</span><Input type="time" className="h-9 w-32" value={time} onChange={(e) => onTime(e.target.value)} data-testid="input-repeat-time" aria-label="Time of first dose" /></>}
-        <span className="inline-flex items-center gap-2 whitespace-nowrap">{hours ? "for" : "Or run for"}
+        {!ongoing && <span className="inline-flex items-center gap-2 whitespace-nowrap">{hours ? "for" : "Or run for"}
         <Input type="number" inputMode="numeric" min={1} className="h-9 w-14 text-center tabular-nums" value={runDays} onChange={(e) => applyRun(e.target.value)} placeholder="—" data-testid="input-repeat-days" aria-label="Number of days" />
-        {Number(runDays) === 1 ? "day" : "days"}</span>
+        {Number(runDays) === 1 ? "day" : "days"}</span>}
       </div>
       {hours && (
         <div className="mt-2 rounded-md bg-muted/60 px-2.5 py-2 text-sm" data-testid="barn-hours">
@@ -231,8 +242,16 @@ export function RepeatFields({ start, times, every, unit, time, onTimes, onEvery
           {barnOn && <p className="mt-1 text-xs text-muted-foreground">{d >= 8 ? <>A dose due shortly after {fmtTime(barn.end)} is given at {fmtTime(barn.end)}; later ones wait until {fmtTime(barn.start)} the next morning.</> : <>Doses that would fall overnight start again at {fmtTime(barn.start)} the next morning.</>}</p>}
         </div>
       )}
+      {onReeval && (n > 0 || ongoing) && (
+        <label className="mt-2 flex items-start gap-2 text-sm" data-testid="label-reeval">
+          <Checkbox checked={reeval} onCheckedChange={(c) => onReeval(!!c)} className="mt-0.5" data-testid="checkbox-reeval" />
+          <span>Re-evaluate at each dose<span className="block text-xs text-muted-foreground">Before each repeat you'll be asked how the goat is doing: keep going, give this one as the last dose, or stop.</span></span>
+        </label>
+      )}
       <p className="mt-2 text-xs text-muted-foreground" data-testid="text-repeat-preview">
-        {n > 0 && d > 0
+        {ongoing && d > 0
+          ? <>{repeatText(d, unit)[0].toUpperCase() + repeatText(d, unit).slice(1)} until resolved. Next dose {dates[1] ? fmt(dates[1]) : "—"}; each time a dose is given the next one is added. Stop it from Today when she's better.</>
+          : n > 0 && d > 0
           ? <>{n + 1} doses, {repeatText(d, unit)}: {shown.join(", ")}. {hours ? "Today shows the next dose due, with its time." : "Each repeat is added to the Today to-do list."}</>
           : n > 0 ? "Enter the time between doses." : "Single dose. Pick a schedule above or set a number to schedule repeats."}
       </p>
@@ -578,11 +597,11 @@ export function TreatDialog({ open, onOpenChange, animal: fixed }: { open: boole
     if (!med) return toast({ title: "Pick a medication", variant: "destructive" });
     const times = Math.max(0, Math.floor(Number(v.times) || 0));
     const every = Math.floor(Number(v.every) || 0);
-    if (times > 0 && every < 1) return toast({ title: "Enter the time between doses", variant: "destructive" });
+    if ((times > 0 || v.ongoing) && every < 1) return toast({ title: "Enter the time between doses", variant: "destructive" });
     if (tab && !tdose) return toast({ title: tabletSizes(med).length ? "Enter the goat's weight" : "Add the tablet sizes to this medicine", description: tabletSizes(med).length ? "The tablet dose is worked out from weight." : "Edit it in the Medicine Cabinet.", variant: "destructive" });
     if (needW && !weightOk(v.weightLbs, lw, wOk)) return toast({ title: "Check the weight first", description: lw ? `Tap Still correct if ${lw.lbs} lb is right, or type today's weight. Or type the dose yourself.` : "Enter the goat's weight to work out the dose, or type the dose yourself.", variant: "destructive" });
     const unit: RepeatUnit = v.unit === "hours" ? "hours" : "days";
-    const plan = repeatPlan(v.date, String(times), String(every), unit, v.time, v.barnOn ? barnHours : null).slice(1);
+    const plan = repeatPlan(v.date, String(v.ongoing ? 1 : times), String(every), unit, v.time, v.barnOn ? barnHours : null).slice(1);
     setSaving(true);
     try {
       const newW = await saveDoseWeights([{ animalId: animal.id, lbs: v.weightLbs, date: v.date }], weights);
@@ -595,7 +614,8 @@ export function TreatDialog({ open, onOpenChange, animal: fixed }: { open: boole
           milkClearDate: addDays(v.date, med.milkWithdrawalDays ?? 0), meatClearDate: addDays(v.date, med.meatWithdrawalDays ?? 0),
           nextDoseDate: null,
         }],
-        repeat: times > 0 ? { times, every, unit, at: unit === "hours" ? plan : undefined } : undefined,
+        repeat: v.ongoing && every > 0 ? { ongoing: true, times: 1, every, unit, at: unit === "hours" ? plan.slice(0, 1) : undefined, reeval: !!v.reeval }
+          : times > 0 ? { times, every, unit, at: unit === "hours" ? plan : undefined, reeval: !!v.reeval } : undefined,
       });
       toast({ title: "Treatment logged", description: `${goatName(animal)} · ${med.name}${times ? ` · ${times} repeat${times > 1 ? "s" : ""} scheduled` : ""}${newW ? ` · new weight ${v.weightLbs} lb saved` : ""}` });
       onOpenChange(false);
@@ -644,7 +664,7 @@ export function TreatDialog({ open, onOpenChange, animal: fixed }: { open: boole
               Milk clear {fmtShort(addDays(v.date, med.milkWithdrawalDays ?? 0))} · Meat clear {fmtShort(addDays(v.date, med.meatWithdrawalDays ?? 0))} (after this dose; each repeat restarts the clock)
             </div>
           )}
-          {med && <div className="col-span-2"><RepeatFields start={v.date} times={v.times} every={v.every} unit={v.unit === "hours" ? "hours" : "days"} time={v.time || "08:00"} onTimes={set("times")} onEvery={set("every")} onUnit={set("unit")} onTime={set("time")} barnOn={!!v.barnOn} onBarnOn={set("barnOn")} /></div>}
+          {med && <div className="col-span-2"><RepeatFields start={v.date} times={v.times} every={v.every} unit={v.unit === "hours" ? "hours" : "days"} time={v.time || "08:00"} onTimes={set("times")} onEvery={set("every")} onUnit={set("unit")} onTime={set("time")} barnOn={!!v.barnOn} onBarnOn={set("barnOn")} ongoing={!!v.ongoing} onOngoing={set("ongoing")} reeval={!!v.reeval} onReeval={set("reeval")} /></div>}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>

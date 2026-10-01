@@ -51,6 +51,8 @@ export default function Batch() {
   const [bFirst, setBFirst] = useState(true);
   const unitWord = udder ? "tubes" : isDrops(med) ? "drops" : pillU ? `${pillU}s` : "mL";
   const [rTimes, setRTimes] = useState("0");
+  const [rOngoing, setROngoing] = useState(false);
+  const [rReeval, setRReeval] = useState(false);
   const [rEvery, setREvery] = useState("");
   const [rUnit, setRUnit] = useState<RepeatUnit>("days");
   const [tTime, setTTime] = useState(nowTime());
@@ -95,7 +97,7 @@ export default function Batch() {
     if (!treatRows.length) return toast({ title: "No animals to treat", variant: "destructive" });
     const times = Math.max(0, Math.floor(Number(rTimes) || 0));
     const every = Math.floor(Number(rEvery) || 0);
-    if (times > 0 && every < 1) return toast({ title: "Enter the time between doses", variant: "destructive" });
+    if ((times > 0 || rOngoing) && every < 1) return toast({ title: "Enter the time between doses", variant: "destructive" });
     const noTab = tabMed ? treatRows.filter((a) => !tdFor(a)) : [];
     if (noTab.length) return toast({ title: tabletSizes(med).length ? `Enter ${noTab.length} weight${noTab.length === 1 ? "" : "s"}` : "Add the tablet sizes to this medicine", description: tabletSizes(med).length ? `${noTab.slice(0, 4).map((a) => goatName(a)).join(", ")}: the tablet dose is worked out from weight.` : "Edit it in the Medicine Cabinet.", variant: "destructive" });
     if (unchecked.length) return toast({ title: `Check ${unchecked.length} weight${unchecked.length === 1 ? "" : "s"} first`, description: `${unchecked.slice(0, 4).map((a) => goatName(a)).join(", ")}${unchecked.length > 4 ? "…" : ""}: tap the check to confirm the weight on file, or type today's weight.`, variant: "destructive" });
@@ -103,7 +105,8 @@ export default function Batch() {
     const batchId = `B-${Date.now()}`;
     try {
       await saveDoseWeights(treatRows.map((a) => ({ animalId: a.id, lbs: rows[a.id]?.w, date: tDate })), weights);
-      await post("/api/treatments/batch", { repeat: times > 0 ? { times, every, unit: rUnit, at: rUnit === "hours" ? repeatPlan(tDate, String(times), String(every), rUnit, tTime, barnOn ? barnHours : null).slice(1) : undefined } : undefined, treatments: treatRows.map((a) => ({
+      await post("/api/treatments/batch", { repeat: rOngoing && every > 0 ? { ongoing: true, times: 1, every, unit: rUnit, at: rUnit === "hours" ? repeatPlan(tDate, "1", String(every), rUnit, tTime, barnOn ? barnHours : null).slice(1) : undefined, reeval: rReeval }
+        : times > 0 ? { times, every, unit: rUnit, at: rUnit === "hours" ? repeatPlan(tDate, String(times), String(every), rUnit, tTime, barnOn ? barnHours : null).slice(1) : undefined, reeval: rReeval } : undefined, treatments: treatRows.map((a) => ({
         animalId: a.id, medicationId: med.id, medName: med.name, date: tDate, time: tTime || null,
         weightLbs: Number(rows[a.id]?.w) || null, tempF: Number(rows[a.id]?.temp) || null, side: sided ? bSide : null, ...(tabMed ? tabletFields(tdFor(a)!) : udder ? { doseMl: null, pillCount: Number(bTubes) || 1, pillUnit: "tube" } : isDrops(med) ? { doseMl: null, drops: Math.round(Number(rows[a.id]?.dose)) || null } : pillU ? { doseMl: null, pillCount: Number(rows[a.id]?.dose) || null, pillUnit: pillU } : { doseMl: Number(rows[a.id]?.dose) || null }), route: med.route,
         reason: reason || null, givenBy: givenBy || null, batchId,
@@ -233,7 +236,7 @@ export default function Batch() {
                 <Field label="Time given"><Input type="time" value={tTime} onChange={(e) => setTTime(e.target.value)} data-testid="input-batch-time" /></Field>
                 <Field label="Given by"><Input value={givenBy} onChange={(e) => setGivenBy(e.target.value)} /></Field>
                 <Field label="Reason" className="sm:col-span-2"><Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g., Fall deworming, CD&T booster" data-testid="input-batch-reason" /></Field>
-                {med && <div className="sm:col-span-2"><RepeatFields start={tDate} times={rTimes} every={rEvery} unit={rUnit} time={tTime || "08:00"} onTimes={setRTimes} onEvery={setREvery} onUnit={setRUnit} onTime={setTTime} barnOn={barnOn} onBarnOn={setBarnOn} /></div>}
+                {med && <div className="sm:col-span-2"><RepeatFields start={tDate} times={rTimes} every={rEvery} unit={rUnit} time={tTime || "08:00"} onTimes={setRTimes} onEvery={setREvery} onUnit={setRUnit} onTime={setTTime} barnOn={barnOn} onBarnOn={setBarnOn} ongoing={rOngoing} onOngoing={setROngoing} reeval={rReeval} onReeval={setRReeval} /></div>}
                 {med && !med.vetConfirmed && <div className="flex items-start gap-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200 sm:col-span-2"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />This medication's dose and withdrawal haven't been marked as vet-confirmed.</div>}
               </div>
               {chosen.length > 0 && (

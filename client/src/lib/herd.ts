@@ -583,3 +583,8 @@ export function calfProKids(animals: Animal[], care: Care[], treatments: Treatme
   }
   return out.sort((x, y) => x.animal.dob!.localeCompare(y.animal.dob!) || x.animal.name.localeCompare(y.animal.name));
 }
+
+/** "dose 2 of 5", or "dose 4, until resolved" for open-ended series */
+export function doseOfText(k: { doseNo?: number | null; doseTotal?: number | null }) {
+  return k.doseTotal ? `dose ${k.doseNo} of ${k.doseTotal}` : `dose ${k.doseNo}, until resolved`;
+}

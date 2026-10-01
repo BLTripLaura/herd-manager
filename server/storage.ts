@@ -201,9 +201,11 @@ export class DatabaseStorage {
     });
   }
   /** Save treatments and schedule repeat-dose tasks. */
-  async logTreatments(rows: any[], repeat?: { times: number; everyDays?: number; every?: number; unit?: string; at?: { date: string; time: string | null }[] }) {
+  async logTreatments(rows: any[], repeat?: { times: number; everyDays?: number; every?: number; unit?: string; at?: { date: string; time: string | null }[]; ongoing?: boolean; reeval?: boolean }) {
     return tx(async () => {
-      const times = Math.max(0, Math.floor(Number(repeat?.times) || 0));
+      const ongoing = !!repeat?.ongoing && Number(repeat?.every ?? repeat?.everyDays) > 0;
+      const reeval = !!repeat?.reeval;
+      const times = ongoing ? 1 : Math.max(0, Math.floor(Number(repeat?.times) || 0));
       const hours = repeat?.unit === "hours";
       const every = Math.max(1, Math.floor(Number(repeat?.every ?? repeat?.everyDays) || 0));
       // The app sends the exact dose times for hourly schedules (already kept inside barn hours)
@@ -211,7 +213,7 @@ export class DatabaseStorage {
       const at = (date: string, time: string | null | undefined, k: number) => given && given[k - 1] ? { date: given[k - 1].date, time: given[k - 1].time ?? null }
         : hours ? addHoursIso(date, time || "08:00", every * k) : { date: addDaysIso(date, every * k), time: null as string | null };
       const batchId = rows[0]?.batchId || `S-${Date.now()}`;
-      const total = times ? times + 1 : null;
+      const total = times && !ongoing ? times + 1 : null;
       const created: any[] = [];
       for (const r of rows) {
         const row = { ...r, batchId: r.batchId || batchId };
@@ -226,7 +228,8 @@ export class DatabaseStorage {
         const ids = created.map((t: any) => t.animalId).join(",");
         for (let k = 1; k <= times; k++) {
           await this.create("tasks", {
-            title: `${first.medName} — dose ${startNo + k} of ${first.doseTotal}`,
+            title: ongoing ? `${first.medName} — dose ${startNo + k}, until resolved` : `${first.medName} — dose ${startNo + k} of ${first.doseTotal}`,
+            ...(ongoing ? { repeatEvery: every, repeatUnit: hours ? "hours" : "days" } : {}), reeval,
             dueDate: at(first.date, first.time, k).date, dueTime: at(first.date, first.time, k).time, animalId: created.length === 1 ? first.animalId : null,
             done: false, kind: "dose", medicationId: first.medicationId, batchId: first.batchId, animalIds: ids,
             doseNo: startNo + k, doseTotal: first.doseTotal,
@@ -238,23 +241,29 @@ export class DatabaseStorage {
   }
   /** Log a scheduled repeat dose: copies each animal's first dose, recomputes withdrawal, marks task done. */
   /** Repeating reminder done or skipped: add the next one, counted from when it was done (like EasyKeeper) */
-  async rollRepeat(taskId: number, from: string) {
+  async rollRepeat(taskId: number, from: string, fromTime: string | null = null) {
     const k: any = await get("SELECT * FROM tasks WHERE id = ?", taskId);
     if (!k?.repeat_every) return null;
+    const hrs = k.repeat_unit === "hours";
+    const next = hrs ? addHoursIso(from, fromTime || k.due_time || "08:00", k.repeat_every) : { date: addDaysIso(from, k.repeat_every), time: k.due_time };
+    // "Until resolved" dose series count up: dose 3, dose 4, ...
+    const no = k.dose_no ? k.dose_no + 1 : null;
+    const title = no && !k.dose_total ? `${k.med_name || String(k.title).split(" — ")[0]} — dose ${no}, until resolved` : k.title;
     const ids = String(k.animal_ids || k.animal_id || "").split(",").map(Number).filter(Boolean);
     if (ids.length) {
       const live: any[] = await all(`SELECT id FROM animals WHERE status = 'active' AND id IN (${ids.join(",")})`);
       if (!live.length) return null;
     }
     const [row] = await db.insert(s.tasks).values({
-      title: k.title, dueDate: addDaysIso(from, k.repeat_every), dueTime: k.due_time, animalId: k.animal_id, kind: k.kind, medicationId: k.medication_id,
+      title, dueDate: next.date, dueTime: next.time, doseNo: no, doseTotal: k.dose_total, repeatUnit: k.repeat_unit, reeval: k.reeval, animalId: k.animal_id, kind: k.kind, medicationId: k.medication_id,
       batchId: k.batch_id, animalIds: k.animal_ids, medName: k.med_name, doseText: k.dose_text, doseMl: k.dose_ml, drops: k.drops,
       route: k.route, notes: k.notes, repeatEvery: k.repeat_every, source: k.source, done: false,
     } as any).returning();
     return row;
   }
   /** doses/weights: per-goat dose (mL) and checked weight when the dose goes by body weight */
-  async giveDose(taskId: number, date: string, givenBy?: string | null, skipIds: number[] = [], temps: Record<string, number | null> = {}, time: string | null = null, doses: Record<string, number | null> = {}, weights: Record<string, number | null> = {}) {
+  /** extra.stopAfter: this is the last dose (re-evaluated, resolved); extra.note: re-evaluation note saved on each treatment */
+  async giveDose(taskId: number, date: string, givenBy?: string | null, skipIds: number[] = [], temps: Record<string, number | null> = {}, time: string | null = null, doses: Record<string, number | null> = {}, weights: Record<string, number | null> = {}, extra: { stopAfter?: boolean; note?: string | null } = {}) {
     return tx(async () => {
       const [task]: any[] = await db.select().from(s.tasks).where(eq(s.tasks.id, taskId));
       if (!task) throw new Error("Task not found");
@@ -283,7 +292,7 @@ export class DatabaseStorage {
         const t = await this.create("treatments", {
           animalId: aid, medicationId: base.medicationId, medName: base.medName, date, time: time || null, weightLbs: Number(weights[aid]) > 0 ? Number(weights[aid]) : base.weightLbs, tempF: Number(temps[aid]) || null, doseMl: Number(doses[aid]) > 0 ? Math.round(Number(doses[aid]) * 10) / 10 : base.doseMl, drops: base.drops ?? null, pillCount: base.pillCount ?? null, pillUnit: base.pillUnit ?? null, side: base.side ?? null,
           route: base.route, reason: base.reason, givenBy: givenBy || base.givenBy, batchId: base.batchId,
-          doseNo: task.doseNo, doseTotal: task.doseTotal, notes: null,
+          doseNo: task.doseNo, doseTotal: task.doseTotal, notes: extra.note ? String(extra.note).slice(0, 500) : null,
           milkClearDate: addDaysIso(date, med?.milkWithdrawalDays ?? 0), meatClearDate: addDaysIso(date, med?.meatWithdrawalDays ?? 0),
           nextDoseDate: null,
           ...(tabs.doseDetail ? { ...tabs, weightLbs: tabW ?? base.weightLbs ?? null } : base.doseDetail ? { doseMg: base.doseMg ?? null, doseDetail: base.doseDetail } : {}),
@@ -292,7 +301,13 @@ export class DatabaseStorage {
         created.push(t);
       }
       await db.update(s.tasks).set({ done: true }).where(eq(s.tasks.id, taskId));
-      await this.rollRepeat(taskId, date);
+      if (extra.stopAfter) {
+        // Resolved: this was the last dose, so the rest of the series comes off the list
+        if (task.batchId) {
+          for (const k of await all("SELECT id FROM tasks WHERE batch_id = ? AND kind = 'dose' AND done = false", task.batchId)) await run("DELETE FROM tasks WHERE id = ?", (k as any).id);
+          await run("UPDATE treatments SET next_dose_date = NULL WHERE batch_id = ?", task.batchId);
+        }
+      } else await this.rollRepeat(taskId, date, time || task.dueTime || null);
       return created;
     });
   }
@@ -301,8 +316,8 @@ export class DatabaseStorage {
     const t: any = await get("SELECT id FROM tasks WHERE id = ? AND kind = 'dose' AND done = false", taskId);
     if (!t) throw new Error("That dose isn't on the list any more.");
     await run("UPDATE tasks SET done = true, skipped = true WHERE id = ?", taskId);
-    const k: any = await get("SELECT due_date FROM tasks WHERE id = ?", taskId);
-    await this.rollRepeat(taskId, k.due_date);
+    const k: any = await get("SELECT due_date, due_time FROM tasks WHERE id = ?", taskId);
+    await this.rollRepeat(taskId, k.due_date, k.due_time);
     return { ok: true };
   }
   /** Stop a repeat-dose series from this dose on, for all its goats or just some. Doses already given stay. */

@@ -8,7 +8,7 @@ import { Field } from "@/components/forms";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { MoreVertical, SkipForward, OctagonX } from "lucide-react";
-import { tempNote, goatName, regName, doseText, taskDoseText } from "@/lib/herd";
+import { tempNote, goatName, regName, doseText, taskDoseText, doseOfText } from "@/lib/herd";
 import { useList, useSave, post, today, addDays, fmtShort, fmtTime, nowTime, shortName, latestWeight, isWeightDosed, calcDoseMl, saveDoseWeights, weightChanged, isTabletMg, tabletDose, type Task } from "@/lib/herd";
 import { weightOk } from "@/components/weight-check";
 import { Check } from "lucide-react";
@@ -30,8 +30,13 @@ export function GiveDoseDialog({ task, onClose }: { task: Task | null; onClose: 
   const [temps, setTemps] = useState<Record<number, string>>({});
   const [wv, setWv] = useState<Record<number, string>>({}); // typed weights
   const [wok, setWok] = useState<Record<number, boolean>>({}); // weight on file confirmed
+  // Re-evaluate before this dose: keep going, give this as the last dose, or stop without giving
+  const [plan, setPlan] = useState<"" | "go" | "last" | "stop">("");
+  const [evalNote, setEvalNote] = useState("");
+  const ongoing = !!task?.doseNo && !task?.doseTotal;
+  const askEval = !!task?.reeval || ongoing;
 
-  useEffect(() => { if (task) { setDate(today()); setTime(nowTime()); setSkip([]); setTemps({}); setWv({}); setWok({}); } }, [task?.id]); // eslint-disable-line
+  useEffect(() => { if (task) { setDate(today()); setTime(nowTime()); setSkip([]); setTemps({}); setWv({}); setWok({}); setPlan(""); setEvalNote(""); } }, [task?.id]); // eslint-disable-line
 
   if (!task) return null;
   const ids = String(task.animalIds || task.animalId || "").split(",").map(Number).filter(Boolean);
@@ -59,7 +64,18 @@ export function GiveDoseDialog({ task, onClose }: { task: Task | null; onClose: 
   const total = giving.reduce((s, r) => s + (r.dose ?? 0), 0);
 
   const unchecked = giving.filter((r) => !r.ok);
+  const stopNow = async () => {
+    setBusy(true);
+    try {
+      await post(`/api/tasks/${task.id}/stop`, {});
+      toast({ title: `Stopped ${task.title.split(" — ")[0]}`, description: "Marked resolved. No more doses on the list." });
+      onClose();
+    } catch (e: any) { toast({ title: "Could not stop the doses", description: String(e?.message ?? e), variant: "destructive" }); }
+    finally { setBusy(false); }
+  };
   const give = async () => {
+    if (task.reeval && !plan) return toast({ title: "Re-evaluate first", description: "Pick keep going, last dose, or resolved.", variant: "destructive" });
+    if (plan === "stop") return stopNow();
     if (unchecked.length) return toast({ title: `Check ${unchecked.length} weight${unchecked.length === 1 ? "" : "s"} first`, description: "The dose goes by weight. Tap Still correct, or type today's weight.", variant: "destructive" });
     setBusy(true);
     try {
@@ -68,8 +84,9 @@ export function GiveDoseDialog({ task, onClose }: { task: Task | null; onClose: 
         weights: Object.fromEntries(giving.filter((r) => r.wb).map((r) => [r.a!.id, Number(r.w) || null])),
       } : {};
       if (byWeight) await saveDoseWeights(giving.filter((r) => r.wb).map((r) => ({ animalId: r.a!.id, lbs: r.w, date })), weightList);
-      const created = await post(`/api/tasks/${task.id}/give`, { ...extra, date, time: time || null, givenBy: givenBy || null, skipIds: skip, temps: Object.fromEntries(Object.entries(temps).filter(([, x]) => Number(x) > 0).map(([k, x]) => [k, Number(x)])) });
-      toast({ title: task.doseNo ? `Logged dose ${task.doseNo} of ${task.doseTotal}` : `Logged ${task.medName ?? task.title.split(" — ")[0]}${task.repeatEvery ? ` · next in ${task.repeatEvery} day${task.repeatEvery === 1 ? "" : "s"}` : ""}`, description: `${created.length} animal${created.length === 1 ? "" : "s"}${drops ? "" : ` · ${total.toFixed(1)} mL`}` });
+      const evalTxt = askEval && (plan || evalNote.trim()) ? [plan === "last" ? "Re-evaluated: last dose, resolved" : plan === "go" ? "Re-evaluated: continue" : "", evalNote.trim()].filter(Boolean).join(" · ") : null;
+      const created = await post(`/api/tasks/${task.id}/give`, { ...extra, stopAfter: plan === "last", note: evalTxt, date, time: time || null, givenBy: givenBy || null, skipIds: skip, temps: Object.fromEntries(Object.entries(temps).filter(([, x]) => Number(x) > 0).map(([k, x]) => [k, Number(x)])) });
+      toast({ title: task.doseNo ? `Logged ${doseOfText(task)}` : `Logged ${task.medName ?? task.title.split(" — ")[0]}${task.repeatEvery ? ` · next in ${task.repeatEvery} ${task.repeatUnit === "hours" ? "hour" : "day"}${task.repeatEvery === 1 ? "" : "s"}` : ""}`, description: `${created.length} animal${created.length === 1 ? "" : "s"}${drops ? "" : ` · ${total.toFixed(1)} mL`}` });
       onClose();
     } catch (e: any) { toast({ title: "Could not log the dose", description: String(e?.message ?? e), variant: "destructive" }); }
     finally { setBusy(false); }
@@ -113,6 +130,21 @@ export function GiveDoseDialog({ task, onClose }: { task: Task | null; onClose: 
           ))}
         </ul>
         <p className="-mt-2 text-xs text-muted-foreground">Temperature is optional · normal 101.5–103.5 °F</p>
+        {askEval && (
+          <div className={`rounded-md border p-3 ${task.reeval && !plan ? "border-amber-400 bg-amber-50 dark:bg-amber-950/30" : ""}`} data-testid="box-reeval">
+            <div className="text-sm font-semibold">{task.reeval ? "Re-evaluate before this dose" : "Until resolved"}</div>
+            <p className="mb-2 text-xs text-muted-foreground">How is she doing?</p>
+            <div className="grid gap-1.5 sm:grid-cols-3" role="radiogroup" aria-label="Re-evaluate">
+              {([["go", "Keep going", "Give this dose; the next one stays on the list"], ["last", "Last dose", "Give this dose, then it's resolved"], ["stop", "Resolved, stop", "Don't give; no more doses"]] as const).map(([k, label, hint]) => (
+                <button key={k} type="button" role="radio" aria-checked={plan === k} onClick={() => setPlan(plan === k && !task.reeval ? "" : k)}
+                  className={`rounded-md border px-2.5 py-2 text-left text-sm ${plan === k ? "border-primary bg-primary text-primary-foreground" : "hover:border-primary"}`} data-testid={`button-reeval-${k}`}>
+                  <span className="block font-semibold">{label}</span><span className={`block text-xs ${plan === k ? "opacity-90" : "text-muted-foreground"}`}>{hint}</span>
+                </button>
+              ))}
+            </div>
+            <Input className="mt-2" value={evalNote} onChange={(e) => setEvalNote(e.target.value)} placeholder="Notes (optional), e.g. eating well, limp better" data-testid="input-reeval-note" />
+          </div>
+        )}
         {med && (
           <p className="text-xs text-muted-foreground">
             {byWeight ? "Dose worked out from the newest weight." : series.length ? "Same dose as the first treatment." : "Dose from the reminder."} {(med.milkWithdrawalDays ?? 0) + (med.meatWithdrawalDays ?? 0) > 0
@@ -122,7 +154,7 @@ export function GiveDoseDialog({ task, onClose }: { task: Task | null; onClose: 
         )}
         <DialogFooter className="gap-2 sm:justify-between">
           <Button variant="ghost" onClick={dismiss} data-testid="button-dismiss-dose">Mark done, don't log</Button>
-          <Button onClick={give} disabled={busy || giving.length === 0} data-testid="button-confirm-give">Log dose for {giving.length}</Button>
+          <Button onClick={give} disabled={busy || (plan !== "stop" && giving.length === 0)} variant={plan === "stop" ? "destructive" : "default"} data-testid="button-confirm-give">{plan === "stop" ? "Stop, resolved" : plan === "last" ? `Log last dose for ${giving.length}` : `Log dose for ${giving.length}`}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -149,7 +181,7 @@ export function DoseMenu({ task, tasks }: { task: Task; tasks: Task[] }) {
     try {
       if (mode === "skip") {
         await post(`/api/tasks/${task.id}/skip`);
-        toast({ title: `Skipped ${med} dose ${task.doseNo} of ${task.doseTotal}`, description: next ? `Next dose ${fmtShort(next.dueDate)}${next.dueTime ? ` ${fmtTime(next.dueTime)}` : ""}` : "That was the last dose in the series." });
+        toast({ title: `Skipped ${med} ${doseOfText(task)}`, description: next ? `Next dose ${fmtShort(next.dueDate)}${next.dueTime ? ` ${fmtTime(next.dueTime)}` : ""}` : "That was the last dose in the series." });
       } else {
         if (!stopIds.length) { toast({ title: "Pick at least one goat to stop", variant: "destructive" }); return; }
         await post(`/api/tasks/${task.id}/stop`, { animalIds: stopIds });
@@ -172,7 +204,7 @@ export function DoseMenu({ task, tasks }: { task: Task; tasks: Task[] }) {
       <AlertDialog open={!!mode} onOpenChange={(o) => !o && setMode(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{mode === "skip" ? `Skip ${med} dose ${task.doseNo} of ${task.doseTotal}?` : `Stop ${med}?`}</AlertDialogTitle>
+            <AlertDialogTitle>{mode === "skip" ? `Skip ${med} ${doseOfText(task)}?` : `Stop ${med}?`}</AlertDialogTitle>
             <AlertDialogDescription>
               {mode === "skip"
                 ? <>Nothing is logged for {who}. {next ? <>The next dose stays on {fmtShort(next.dueDate)}{next.dueTime ? ` at ${fmtTime(next.dueTime)}` : ""}.</> : "This is the last dose, so the series ends."}</>

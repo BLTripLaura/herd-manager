@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader, Stat, Empty, useApp } from "@/components/shell";
-import { useList, useSave, activeHolds, today, addDays, daysBetween, fmtShort, relDays, shortName, heatWatch, fmtDate, usDue, needsUltrasound, prekidDue, cdtSchedule, calfProKids, CALF_PRO_AGE, CARE_TYPES, type Task, type Breeding, type VaxItem, type Animal , nextDoses, fmtTime, nowTime, goatName, regName, doseText, everyText, taskDoseText } from "@/lib/herd";
+import { useList, useSave, activeHolds, today, addDays, daysBetween, fmtShort, relDays, shortName, heatWatch, fmtDate, usDue, needsUltrasound, prekidDue, cdtSchedule, calfProKids, CALF_PRO_AGE, CARE_TYPES, type Task, type Breeding, type VaxItem, type Animal , nextDoses, fmtTime, nowTime, goatName, regName, doseText, everyText, taskDoseText, doseOfText } from "@/lib/herd";
 import { UltrasoundDialog, PrekidDialog, GiveCdtDialog } from "@/components/pregnancy";
 import { CdtDatesDialog } from "@/components/cdt-dates";
 import { HeatDialog, TreatDialog } from "@/components/forms";
@@ -30,6 +30,7 @@ const careFor = (title: string) => {
 
 type DueItem = { key: string; date: string; time?: string | null; title: string; sub?: string; href?: string; kind: "dose" | "kid" | "task" | "heat" | "us" | "prekid" | "vax"; taskId?: number; task?: Task; doeId?: number; breeding?: Breeding; vax?: VaxItem; calfPro?: "due" | "done" | "next" };
 
+const cap = (x: string) => x[0].toUpperCase() + x.slice(1);
 export default function Today() {
   const [treating, setTreating] = useState(false);
   const [customizing, setCustomizing] = useState(false);
@@ -101,7 +102,7 @@ export default function Today() {
       const names = ids.map((id) => byId.get(id)).filter(Boolean).map((a) => goatName(a!));
       const sub = names.length <= 3 ? names.join(", ") : `${names.slice(0, 3).join(", ")} +${names.length - 3} more`;
       const more = k.dueTime && remaining ? ` · ${moreToday ? `${moreToday} more today` : `${remaining} more`}, last ${fmtShort(last.dueDate)}${last.dueTime ? ` ${fmtTime(last.dueTime)}` : ""}` : "";
-      items.push({ key: `t${k.id}`, date: k.dueDate, time: k.dueTime, title: k.title.split(" — ")[0], sub: k.doseNo ? `Dose ${k.doseNo} of ${k.doseTotal} · ${sub}${more}` : [sub, taskDoseText(k), everyText(k.repeatEvery), k.notes].filter(Boolean).join(" · "), href: ids.length === 1 ? `/animal/${ids[0]}` : undefined, kind: "dose", taskId: k.id, task: k });
+      items.push({ key: `t${k.id}`, date: k.dueDate, time: k.dueTime, title: k.title.split(" — ")[0], sub: k.doseNo ? `${cap(doseOfText(k))}${k.reeval ? " · Re-evaluate" : ""} · ${sub}${more}` : [sub, taskDoseText(k), everyText(k.repeatEvery), k.notes].filter(Boolean).join(" · "), href: ids.length === 1 ? `/animal/${ids[0]}` : undefined, kind: "dose", taskId: k.id, task: k });
     }
     for (const k of tasks) {
       if (k.done || k.dueDate > horizon) continue;
