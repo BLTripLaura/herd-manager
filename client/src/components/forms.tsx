@@ -114,19 +114,22 @@ export function rankMeds(list: Medication[], q: string) {
   return sorted.map((m) => [m, score(m)] as const).filter(([, s]) => s > 0).sort((a, b) => b[1] - a[1]).map(([m]) => m);
 }
 /** Type-to-search medicine chooser */
-export function MedPick({ value, onChange, meds, placeholder = "Choose a medication", testId }: {
-  value?: string | number | null; onChange: (id: string) => void; meds: Medication[]; placeholder?: string; testId?: string;
+/** Treatment that isn't a medicine in the cabinet: picked as "other" and described in words */
+export const OTHER_TREATMENT = "other";
+export function MedPick({ value, onChange, meds, placeholder = "Choose a medication", testId, withOther = false }: {
+  value?: string | number | null; onChange: (id: string) => void; meds: Medication[]; placeholder?: string; testId?: string; withOther?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const cur = meds.find((m) => String(m.id) === String(value ?? ""));
   const list = rankMeds(meds, q);
-  const pick = (id: number) => { onChange(String(id)); setOpen(false); setQ(""); };
+  const pick = (id: number | string) => { onChange(String(id)); setOpen(false); setQ(""); };
+  const isOther = withOther && value === OTHER_TREATMENT;
   return (
     <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setQ(""); }}>
       <PopoverTrigger asChild>
         <button type="button" className="flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-left text-sm" data-testid={testId}>
-          <span className={`truncate ${cur ? "" : "text-muted-foreground"}`}>{cur ? cur.name : placeholder}</span>
+          <span className={`truncate ${cur || isOther ? "" : "text-muted-foreground"}`}>{cur ? cur.name : isOther ? "Other (described below)" : placeholder}</span>
           <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
         </button>
       </PopoverTrigger>
@@ -135,6 +138,14 @@ export function MedPick({ value, onChange, meds, placeholder = "Choose a medicat
           onKeyDown={(e) => { if (e.key === "Enter" && list[0]) { e.preventDefault(); pick(list[0].id); } }} /></div>
         <ul className="max-h-72 overflow-y-auto py-1" role="listbox">
           {list.length === 0 && <li className="px-3 py-2 text-sm text-muted-foreground">No medicines match “{q}”</li>}
+          {withOther && (
+            <li className="border-b">
+              <button type="button" onClick={() => pick(OTHER_TREATMENT)} className={`w-full px-3 py-2 text-left text-sm hover-elevate ${isOther ? "bg-primary/10" : ""}`} data-testid="option-med-other">
+                <span className="font-medium">Other</span>
+                <span className="block text-xs text-muted-foreground">Not in the Medicine Cabinet: describe it and set how often to repeat</span>
+              </button>
+            </li>
+          )}
           {list.map((m) => (
             <li key={m.id}>
               <button type="button" onClick={() => pick(m.id)} className={`w-full px-3 py-2 text-left text-sm hover-elevate ${String(m.id) === String(value ?? "") ? "bg-primary/10" : ""}`} data-testid={`option-med-${m.id}`}>
@@ -578,6 +589,7 @@ export function TreatDialog({ open, onOpenChange, animal: fixed }: { open: boole
     }
   }, [newMed, meds]); // eslint-disable-line
   const med = meds.find((m) => String(m.id) === String(v.medicationId));
+  const isOther = v.medicationId === OTHER_TREATMENT;
   const oral = (v.route ?? med?.route) === "Oral";
   const udder = (v.route ?? med?.route) === "Intramammary";
   const sided = hasSide(v.route ?? med?.route);
@@ -601,7 +613,8 @@ export function TreatDialog({ open, onOpenChange, animal: fixed }: { open: boole
   }, [v.medicationId]); // eslint-disable-line
   const submit = async () => {
     if (!animal) return toast({ title: "Pick a goat", variant: "destructive" });
-    if (!med) return toast({ title: "Pick a medication", variant: "destructive" });
+    if (!med && !isOther) return toast({ title: "Pick a medication", variant: "destructive" });
+    if (isOther && !String(v.otherDesc ?? "").trim()) return toast({ title: "Describe the treatment", description: "e.g., Hoof trim, wound wash, eye flush", variant: "destructive" });
     const times = Math.max(0, Math.floor(Number(v.times) || 0));
     const every = Math.floor(Number(v.every) || 0);
     if ((times > 0 || v.ongoing) && every < 1) return toast({ title: "Enter the time between doses", variant: "destructive" });
@@ -612,19 +625,24 @@ export function TreatDialog({ open, onOpenChange, animal: fixed }: { open: boole
     setSaving(true);
     try {
       const newW = await saveDoseWeights([{ animalId: animal.id, lbs: v.weightLbs, date: v.date }], weights);
+      const otherName = String(v.otherDesc ?? "").trim();
       await post("/api/treatments/batch", {
-        treatments: [{
-          animalId: animal.id, medicationId: med.id, medName: med.name, date: v.date, time: v.time || null, weightLbs: num(v.weightLbs), tempF: num(v.tempF),
+        treatments: [isOther ? {
+          animalId: animal.id, medicationId: null, medName: otherName, date: v.date, time: v.time || null, weightLbs: num(v.weightLbs), tempF: num(v.tempF),
+          doseMl: null, doseDetail: String(v.otherDose ?? "").trim() || null, route: null, reason: v.reason, givenBy: v.givenBy, notes: v.notes,
+          milkClearDate: null, meatClearDate: null, nextDoseDate: null,
+        } : {
+          animalId: animal.id, medicationId: med!.id, medName: med!.name, date: v.date, time: v.time || null, weightLbs: num(v.weightLbs), tempF: num(v.tempF),
           side: sided ? v.side || null : null,
           ...(tdose ? tabletFields(tdose) : udder ? { doseMl: null, pillCount: Number(v.tubes) || 1, pillUnit: "tube" } : isDrops(med) ? { doseMl: null, drops: num(v.doseMl) } : oral && v.doseUnit !== "mL" ? { doseMl: null, pillCount: num(v.doseMl), pillUnit: v.doseUnit } : { doseMl: num(v.doseMl) }),
           route: v.route, reason: v.reason, givenBy: v.givenBy, notes: v.notes,
-          milkClearDate: addDays(v.date, med.milkWithdrawalDays ?? 0), meatClearDate: addDays(v.date, med.meatWithdrawalDays ?? 0),
+          milkClearDate: addDays(v.date, med!.milkWithdrawalDays ?? 0), meatClearDate: addDays(v.date, med!.meatWithdrawalDays ?? 0),
           nextDoseDate: null,
         }],
         repeat: v.ongoing && every > 0 ? { ongoing: true, times: 1, every, unit, at: unit === "hours" ? plan.slice(0, 1) : undefined, reeval: !!v.reeval }
           : times > 0 ? { times, every, unit, at: unit === "hours" ? plan : undefined, reeval: !!v.reeval } : undefined,
       });
-      toast({ title: "Treatment logged", description: `${goatName(animal)} · ${med.name}${times ? ` · ${times} repeat${times > 1 ? "s" : ""} scheduled` : ""}${newW ? ` · new weight ${v.weightLbs} lb saved` : ""}` });
+      toast({ title: "Treatment logged", description: `${goatName(animal)} · ${isOther ? otherName : med!.name}${v.ongoing ? " · repeats until resolved" : times ? ` · ${times} repeat${times > 1 ? "s" : ""} scheduled` : ""}${newW ? ` · new weight ${v.weightLbs} lb saved` : ""}` });
       onOpenChange(false);
     } catch (e: any) { toast({ title: "Could not save", description: String(e?.message ?? e), variant: "destructive" }); }
     finally { setSaving(false); }
@@ -641,14 +659,17 @@ export function TreatDialog({ open, onOpenChange, animal: fixed }: { open: boole
           )}
           <Field label="Medication" className="col-span-2" hint={meds.length ? undefined : "No medications yet. Add one to get dosing and withdrawal times."}>
             <div className="flex gap-2">
-              <div className="min-w-0 flex-1"><MedPick value={v.medicationId ? String(v.medicationId) : null} onChange={set("medicationId")} testId="select-med" meds={meds} /></div>
+              <div className="min-w-0 flex-1"><MedPick value={v.medicationId ? String(v.medicationId) : null} onChange={set("medicationId")} testId="select-med" meds={meds} withOther /></div>
               <Button type="button" variant="outline" onClick={() => { medsBefore.current = meds.map((m) => m.id).concat(-1); setNewMed(true); }} data-testid="button-treat-new-med"><Plus />New</Button>
             </div>
           </Field>
           <Field label="Date"><Input type="date" value={v.date} onChange={(e) => set("date")(e.target.value)} /></Field>
           <Field label="Time given"><Input type="time" value={v.time ?? ""} onChange={(e) => set("time")(e.target.value)} data-testid="input-treat-time" /></Field>
           {animal && <div className="col-span-2"><WeightCheck lbs={v.weightLbs} onLbs={(x) => { setWTyped(true); set("weightLbs")(x); }} lw={lw} confirmed={wOk} onConfirmed={setWOk} required={needW} testId="treat-weight" canTypeDose={!tab} /></div>}
-          {tab ? (
+          {isOther ? (<>
+            <Field label="What was done" className="col-span-2"><Input value={v.otherDesc ?? ""} onChange={(e) => set("otherDesc")(e.target.value)} placeholder="e.g., Hoof trim, wound wash, eye flush" data-testid="input-other-desc" /></Field>
+            <Field label="Amount or details" className="col-span-2" hint="Optional"><Input value={v.otherDose ?? ""} onChange={(e) => set("otherDose")(e.target.value)} placeholder="e.g., 10 mL saline, both front feet" data-testid="input-other-dose" /></Field>
+          </>) : tab ? (
             <div className="col-span-2"><TabletDoseBox dose={tdose} hasFirst={!!hasFirst} isFirst={!!isFirst} onFirst={(f) => set("firstDose")(f)} med={med} /></div>
           ) : udder ? (
             <Field label="Dose"><Pick value={v.tubes ?? "1"} onChange={set("tubes")} testId="select-treat-tubes" options={TUBE_AMOUNTS} /></Field>
@@ -671,7 +692,7 @@ export function TreatDialog({ open, onOpenChange, animal: fixed }: { open: boole
               Milk clear {fmtShort(addDays(v.date, med.milkWithdrawalDays ?? 0))} · Meat clear {fmtShort(addDays(v.date, med.meatWithdrawalDays ?? 0))} (after this dose; each repeat restarts the clock)
             </div>
           )}
-          {med && <div className="col-span-2"><RepeatFields start={v.date} times={v.times} every={v.every} unit={v.unit === "hours" ? "hours" : "days"} time={v.time || "08:00"} onTimes={set("times")} onEvery={set("every")} onUnit={set("unit")} onTime={set("time")} barnOn={!!v.barnOn} onBarnOn={set("barnOn")} ongoing={!!v.ongoing} onOngoing={set("ongoing")} reeval={!!v.reeval} onReeval={set("reeval")} /></div>}
+          {(med || isOther) && <div className="col-span-2"><RepeatFields start={v.date} times={v.times} every={v.every} unit={v.unit === "hours" ? "hours" : "days"} time={v.time || "08:00"} onTimes={set("times")} onEvery={set("every")} onUnit={set("unit")} onTime={set("time")} barnOn={!!v.barnOn} onBarnOn={set("barnOn")} ongoing={!!v.ongoing} onOngoing={set("ongoing")} reeval={!!v.reeval} onReeval={set("reeval")} /></div>}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>

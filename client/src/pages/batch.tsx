@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { PageHeader, useApp } from "@/components/shell";
-import { Field, Pick, RepeatFields, repeatPlan, MedPick } from "@/components/forms";
+import { Field, Pick, RepeatFields, repeatPlan, MedPick, OTHER_TREATMENT } from "@/components/forms";
 import { useBarnHours } from "@/components/barn-hours";
 import { useList, post, today, addDays, tempNote, calcDoseMl, fmtShort, latestWeight, isWeightDosed, isTabletMg, tabletDose, tabletFields, tabletSizes, saveDoseWeights, weightChanged, matchesAnimal, shortName, doseRuleText, invalidateAll, fmtDate , nowTime, type RepeatUnit, goatName, regName, isDrops, pillUnitOf, ORAL_UNITS, hasSide, SIDES, TUBE_AMOUNTS } from "@/lib/herd";
 import { errText } from "@/pages/milk";
@@ -41,6 +41,9 @@ export default function Batch() {
   const [givenBy, setGivenBy] = useState("");
   const [rows, setRows] = useState<Record<number, { w: string; dose: string; skip?: boolean; temp?: string; typed?: boolean; ok?: boolean }>>({});
   const med = meds.find((m) => String(m.id) === medId);
+  const isOther = medId === OTHER_TREATMENT;
+  const [oDesc, setODesc] = useState("");
+  const [oDose, setODose] = useState("");
   const oral = med?.route === "Oral" && !isDrops(med);
   const [bUnit, setBUnit] = useState("mL");
   const pillU = oral && bUnit !== "mL" ? bUnit : null;
@@ -93,7 +96,8 @@ export default function Batch() {
   const totalMl = udder ? treatRows.length * (Number(bTubes) || 1) * (bSide === "Both" ? 2 : 1) : treatRows.reduce((s, a) => s + (isTabletMg(med) ? tabletDose(med, rows[a.id]?.w, Number(med?.firstDoseAmount) > 0 && med?.firstDoseAmount !== med?.doseAmount && bFirst)?.count ?? 0 : Number(rows[a.id]?.dose) || 0), 0);
 
   const saveTreatments = async () => {
-    if (!med) return toast({ title: "Pick a medication", variant: "destructive" });
+    if (!med && !isOther) return toast({ title: "Pick a medication", variant: "destructive" });
+    if (isOther && !oDesc.trim()) return toast({ title: "Describe the treatment", description: "e.g., Hoof trim, wound wash", variant: "destructive" });
     if (!treatRows.length) return toast({ title: "No animals to treat", variant: "destructive" });
     const times = Math.max(0, Math.floor(Number(rTimes) || 0));
     const every = Math.floor(Number(rEvery) || 0);
@@ -106,14 +110,18 @@ export default function Batch() {
     try {
       await saveDoseWeights(treatRows.map((a) => ({ animalId: a.id, lbs: rows[a.id]?.w, date: tDate })), weights);
       await post("/api/treatments/batch", { repeat: rOngoing && every > 0 ? { ongoing: true, times: 1, every, unit: rUnit, at: rUnit === "hours" ? repeatPlan(tDate, "1", String(every), rUnit, tTime, barnOn ? barnHours : null).slice(1) : undefined, reeval: rReeval }
-        : times > 0 ? { times, every, unit: rUnit, at: rUnit === "hours" ? repeatPlan(tDate, String(times), String(every), rUnit, tTime, barnOn ? barnHours : null).slice(1) : undefined, reeval: rReeval } : undefined, treatments: treatRows.map((a) => ({
-        animalId: a.id, medicationId: med.id, medName: med.name, date: tDate, time: tTime || null,
-        weightLbs: Number(rows[a.id]?.w) || null, tempF: Number(rows[a.id]?.temp) || null, side: sided ? bSide : null, ...(tabMed ? tabletFields(tdFor(a)!) : udder ? { doseMl: null, pillCount: Number(bTubes) || 1, pillUnit: "tube" } : isDrops(med) ? { doseMl: null, drops: Math.round(Number(rows[a.id]?.dose)) || null } : pillU ? { doseMl: null, pillCount: Number(rows[a.id]?.dose) || null, pillUnit: pillU } : { doseMl: Number(rows[a.id]?.dose) || null }), route: med.route,
+        : times > 0 ? { times, every, unit: rUnit, at: rUnit === "hours" ? repeatPlan(tDate, String(times), String(every), rUnit, tTime, barnOn ? barnHours : null).slice(1) : undefined, reeval: rReeval } : undefined, treatments: treatRows.map((a) => isOther ? {
+        animalId: a.id, medicationId: null, medName: oDesc.trim(), date: tDate, time: tTime || null,
+        weightLbs: Number(rows[a.id]?.w) || null, tempF: Number(rows[a.id]?.temp) || null, doseMl: null, doseDetail: oDose.trim() || null,
+        reason: reason || null, givenBy: givenBy || null, batchId, milkClearDate: null, meatClearDate: null, nextDoseDate: null,
+      } : ({
+        animalId: a.id, medicationId: med!.id, medName: med!.name, date: tDate, time: tTime || null,
+        weightLbs: Number(rows[a.id]?.w) || null, tempF: Number(rows[a.id]?.temp) || null, side: sided ? bSide : null, ...(tabMed ? tabletFields(tdFor(a)!) : udder ? { doseMl: null, pillCount: Number(bTubes) || 1, pillUnit: "tube" } : isDrops(med!) ? { doseMl: null, drops: Math.round(Number(rows[a.id]?.dose)) || null } : pillU ? { doseMl: null, pillCount: Number(rows[a.id]?.dose) || null, pillUnit: pillU } : { doseMl: Number(rows[a.id]?.dose) || null }), route: med!.route,
         reason: reason || null, givenBy: givenBy || null, batchId,
-        milkClearDate: addDays(tDate, med.milkWithdrawalDays ?? 0), meatClearDate: addDays(tDate, med.meatWithdrawalDays ?? 0),
+        milkClearDate: addDays(tDate, med!.milkWithdrawalDays ?? 0), meatClearDate: addDays(tDate, med!.meatWithdrawalDays ?? 0),
         nextDoseDate: null,
       })) });
-      toast({ title: `Treated ${treatRows.length} animals`, description: `${med.name} · ${unitWord === "mL" ? `${totalMl.toFixed(1)} mL used` : `${Math.round(totalMl * 10) / 10} ${unitWord}`}${times ? ` · ${times} repeat${times > 1 ? "s" : ""} added to Today` : ""}` });
+      toast({ title: `Treated ${treatRows.length} animals`, description: isOther ? `${oDesc.trim()}${rOngoing ? " · repeats until resolved" : times ? ` · ${times} repeat${times > 1 ? "s" : ""} added to Today` : ""}` : `${med!.name} · ${unitWord === "mL" ? `${totalMl.toFixed(1)} mL used` : `${Math.round(totalMl * 10) / 10} ${unitWord}`}${times ? ` · ${times} repeat${times > 1 ? "s" : ""} added to Today` : ""}` });
     } catch (e: any) { toast({ title: "Could not save", description: String(e?.message ?? e), variant: "destructive" }); }
     finally { setBusy(false); }
   };
@@ -227,8 +235,12 @@ export default function Batch() {
             <TabsContent value="treat" className="space-y-4">
               <div className="grid gap-3 rounded-lg border bg-card p-4 sm:grid-cols-2">
                 <Field label="Medication" className="sm:col-span-2" hint={med ? `${doseRuleText(med)} · ${med.route} · milk ${med.milkWithdrawalDays}d / meat ${med.meatWithdrawalDays}d withdrawal` : undefined}>
-                  <MedPick value={medId} onChange={setMedId} testId="select-batch-med" meds={meds} />
+                  <MedPick value={medId} onChange={setMedId} testId="select-batch-med" meds={meds} withOther />
                 </Field>
+                {isOther && <>
+                  <Field label="What was done" className="sm:col-span-2"><Input value={oDesc} onChange={(e) => setODesc(e.target.value)} placeholder="e.g., Hoof trim, wound wash, eye flush" data-testid="input-batch-other-desc" /></Field>
+                  <Field label="Amount or details" className="sm:col-span-2" hint="Optional, the same for each goat"><Input value={oDose} onChange={(e) => setODose(e.target.value)} placeholder="e.g., 10 mL saline" data-testid="input-batch-other-dose" /></Field>
+                </>}
                 {udder && <Field label="Dose"><Pick value={bTubes} onChange={setBTubes} testId="select-batch-tubes" options={TUBE_AMOUNTS} /></Field>}
                 {sided && <Field label="Side"><Pick value={bSide} onChange={setBSide} testId="select-batch-side" placeholder="Left, right or both" options={SIDES} /></Field>}
                 {oral && <Field label="Dose measured in" className="sm:col-span-2"><Pick value={bUnit} onChange={setBUnit} testId="select-batch-dose-unit" options={ORAL_UNITS} /></Field>}
@@ -236,7 +248,7 @@ export default function Batch() {
                 <Field label="Time given"><Input type="time" value={tTime} onChange={(e) => setTTime(e.target.value)} data-testid="input-batch-time" /></Field>
                 <Field label="Given by"><Input value={givenBy} onChange={(e) => setGivenBy(e.target.value)} /></Field>
                 <Field label="Reason" className="sm:col-span-2"><Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g., Fall deworming, CD&T booster" data-testid="input-batch-reason" /></Field>
-                {med && <div className="sm:col-span-2"><RepeatFields start={tDate} times={rTimes} every={rEvery} unit={rUnit} time={tTime || "08:00"} onTimes={setRTimes} onEvery={setREvery} onUnit={setRUnit} onTime={setTTime} barnOn={barnOn} onBarnOn={setBarnOn} ongoing={rOngoing} onOngoing={setROngoing} reeval={rReeval} onReeval={setRReeval} /></div>}
+                {(med || isOther) && <div className="sm:col-span-2"><RepeatFields start={tDate} times={rTimes} every={rEvery} unit={rUnit} time={tTime || "08:00"} onTimes={setRTimes} onEvery={setREvery} onUnit={setRUnit} onTime={setTTime} barnOn={barnOn} onBarnOn={setBarnOn} ongoing={rOngoing} onOngoing={setROngoing} reeval={rReeval} onReeval={setRReeval} /></div>}
                 {med && !med.vetConfirmed && <div className="flex items-start gap-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200 sm:col-span-2"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />This medication's dose and withdrawal haven't been marked as vet-confirmed.</div>}
               </div>
               {chosen.length > 0 && (
@@ -276,7 +288,7 @@ export default function Batch() {
                         </div>
                         <Input className={cn(tInput, "sm:w-20", tempNote(r.temp)?.tone === "high" && "border-destructive text-destructive", tempNote(r.temp)?.tone === "low" && "border-sky-500")} inputMode="decimal" placeholder="opt." aria-label={`Temperature for ${a.name} (optional)`} value={r.temp ?? ""} onChange={(e) => setRow(a.id, { temp: e.target.value })} disabled={r.skip} data-testid={`input-batch-temp-${a.id}`} />
                         <Input className={cn(tInput, needW(a) && !r.skip && (ok ? "border-emerald-500/60" : "border-amber-400"))} inputMode="decimal" value={r.w} onChange={(e) => setRow(a.id, { w: e.target.value })} disabled={r.skip} data-testid={`input-batch-weight-${a.id}`} />
-                        {tabMed ? (() => { const td = tdFor(a); return (
+                        {isOther ? <div className="w-16 truncate text-right text-xs text-muted-foreground sm:w-24" data-testid={`text-batch-other-${a.id}`}>{oDose || "—"}</div> : tabMed ? (() => { const td = tdFor(a); return (
                           <div className="w-24 text-right sm:w-36" data-testid={`text-batch-tab-${a.id}`}>
                             {td ? <><div className="text-sm font-semibold tabular-nums">{td.mg} mg</div><div className="text-[11px] leading-tight text-muted-foreground">{td.text.split(": ")[1]}</div>{Math.abs(td.offPct) > 20 && <div className="text-[11px] font-semibold text-amber-800 dark:text-amber-200">{Math.abs(td.offPct)}% {td.offPct > 0 ? "over" : "under"}</div>}</> : <span className="text-xs text-muted-foreground">needs weight</span>}
                           </div>
@@ -288,7 +300,7 @@ export default function Batch() {
                   <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-muted/30 px-3 py-3">
                     <div className="text-sm">{(() => { const f = treatRows.filter((a) => tempNote(rows[a.id]?.temp)?.tone === "high").length; return f ? <span className="mr-2 font-semibold text-destructive" data-testid="text-batch-fevers">{f} with fever ·</span> : null; })()}<b className="tabular-nums" data-testid="text-batch-total">{unitWord === "mL" ? `${totalMl.toFixed(1)} mL` : `${Math.round(totalMl * 10) / 10} ${unitWord}`}</b> total for {treatRows.length} animals
                       {med && unitWord === "mL" && <span className="text-muted-foreground"> · {Math.round((med.onHandMl ?? 0) * 10) / 10} mL on hand</span>}</div>
-                    <Button onClick={saveTreatments} disabled={busy || !med} data-testid="button-save-batch-treat"><Syringe />{busy ? "Saving…" : `Log ${treatRows.length} treatments`}</Button>
+                    <Button onClick={saveTreatments} disabled={busy || (!med && !isOther)} data-testid="button-save-batch-treat"><Syringe />{busy ? "Saving…" : `Log ${treatRows.length} treatments`}</Button>
                   </div>
                 </div>
               )}
