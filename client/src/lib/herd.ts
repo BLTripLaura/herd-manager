@@ -2,7 +2,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { findParent } from "@shared/breed";
 import { isTabletMg, tabletRuleText } from "@shared/dose";
-export { TABLET_MG, isTabletMg, tabletDose, tabletFields, tabletSizes, tabletRuleText, type TabletDose } from "@shared/dose";
+export { TABLET_MG, LB_PER_KG, perKg, isTabletMg, tabletDose, tabletFields, tabletSizes, tabletRuleText, type TabletDose } from "@shared/dose";
 import type { Animal, Weight, Medication, Treatment, Breeding, Milk, Task, Pasture, PastureMove, OutsideBuck, Heat, Show, AnimalNote, Lactation, Care, BreedingPlan, Contact } from "@shared/schema";
 
 export type { Animal, Weight, Medication, Treatment, Breeding, Milk, Task, Pasture, PastureMove, OutsideBuck, Heat, Show, AnimalNote, Lactation, Care, BreedingPlan, Contact };

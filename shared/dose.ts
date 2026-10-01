@@ -76,10 +76,18 @@ export function tabletDose(m: TabMed, lbs: number | string | null | undefined, f
 /** The treatment fields for a tablet dose */
 export const tabletFields = (d: TabletDose) => ({ doseMl: null, pillCount: d.count, pillUnit: d.form, doseMg: d.mg, doseDetail: d.text });
 
+/** Doses per kg are stored as lb (1 kg = 2.20462 lb). Is this "per lb" amount a whole number of kg? */
+export const LB_PER_KG = 2.20462;
+export function perKg(perLbs: number | null | undefined) {
+  const x = (Number(perLbs) || 0) / LB_PER_KG;
+  return x > 0 && Math.abs(x * 100 - Math.round(x * 100)) < 1e-6 ? Math.round(x * 100) / 100 : null;
+}
+
 /** "1 mg per 2.25 lb first dose, then 0.5 mg per 2.25 lb · 7.5 / 15 mg tablets" */
 export function tabletRuleText(m: TabMed) {
   const per = Number(m?.dosePerLbs) || 0;
-  const rate = (x: number) => (per ? `${x} mg per ${per} lb` : `${x} mg per head`);
+  const kg = perKg(per);
+  const rate = (x: number) => (!per ? `${x} mg per head` : kg ? `${x} mg/kg` + (kg !== 1 ? ` per ${kg} kg` : "") : `${x} mg per ${per} lb`);
   const sizes = tabletSizes(m).slice().reverse().map(r2).join(" / ");
   const form = m?.pillForm === "capsule" ? "capsules" : "tablets";
   const f = Number(m?.firstDoseAmount) || 0, d = Number(m?.doseAmount) || 0;

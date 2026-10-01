@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useBarnHours } from "@/components/barn-hours";
 import {
-  useList, useSave, post, today, addDays, calcDoseMl, latestWeight, isWeightDosed, saveDoseWeights, tabletDose, tabletSizes, tabletFields, isTabletMg, type TabletDose, DOSE_UNITS, GESTATION_DAYS, shortName, doseSchedule, dosesInDays, fmtShort, fmtTime, nowTime, repeatText, type RepeatUnit, type BarnHours,
+  useList, useSave, post, today, addDays, calcDoseMl, latestWeight, isWeightDosed, saveDoseWeights, tabletDose, tabletSizes, tabletFields, isTabletMg, type TabletDose, perKg, LB_PER_KG, DOSE_UNITS, GESTATION_DAYS, shortName, doseSchedule, dosesInDays, fmtShort, fmtTime, nowTime, repeatText, type RepeatUnit, type BarnHours,
   type Animal, type Medication, type Breeding, type OutsideBuck, type Heat, HEAT_SIGNS, doseRuleText, heatDates, heatInterval, useRemove, fmtDate, ULTRASOUND_DAYS, PREKID_DAYS, RECHECK_DAYS, usDue, US_LABEL, goatName, regName, matchesAnimal, idMatch, isDrops, pillUnitOf, ORAL_UNITS, hasSide, SIDES, TUBE_AMOUNTS } from "@/lib/herd";
 import { ExternalLink, Plus, ChevronsUpDown } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -436,6 +436,10 @@ export function MedDialog({ open, onOpenChange, med }: { open: boolean; onOpenCh
   const needsConc = String(v.doseUnit).startsWith("mg");
   const dropsMed = v.doseUnit === "drops";
   const tabMg = v.doseUnit === "tab-mg";
+  // "Dose is per" box: shown in kg or lb, stored as lb
+  const [perUnit, setPerUnit] = useState<"lb" | "kg">("kg");
+  const [perTxt, setPerTxt] = useState("");
+  useEffect(() => { if (open) { const per = Number(med?.dosePerLbs) || 0; const kg = perKg(per); setPerUnit(per && !kg ? "lb" : "kg"); setPerTxt(per ? String(kg ?? per) : ""); } }, [open, med?.id]); // eslint-disable-line
   const preview = tabMg ? [20, 50, 100, 150].map((w) => ({ w, f: tabletDose(medPreview(v), Number(v.dosePerLbs) > 0 ? w : null, true), d: tabletDose(medPreview(v), Number(v.dosePerLbs) > 0 ? w : null, false) })) : [];
   const submit = async () => {
     if (!v.name?.trim() || v.doseAmount === undefined || v.doseAmount === "") return toast({ title: "Name and dose are required", variant: "destructive" });
@@ -467,7 +471,13 @@ export function MedDialog({ open, onOpenChange, med }: { open: boolean; onOpenCh
             <div className="col-span-2 grid grid-cols-2 gap-3 rounded-md border bg-muted/30 p-3" data-testid="box-tablet-dose">
               <Field label="Given as"><Pick value={v.pillForm === "capsule" ? "capsule" : "tablet"} onChange={set("pillForm")} testId="select-pill-form" options={[{ value: "tablet", label: "Tablets" }, { value: "capsule", label: "Capsules" }]} /></Field>
               <Field label="Sizes on hand (mg each)" hint="e.g. 7.5, 15"><Input value={v.tabletSizes ?? ""} onChange={(e) => set("tabletSizes")(e.target.value)} placeholder="7.5, 15" data-testid="input-tablet-sizes" /></Field>
-              <Field label="Per how many lb" hint="Blank = the same dose per head"><Input type="number" inputMode="decimal" step="any" value={v.dosePerLbs ?? ""} onChange={(e) => set("dosePerLbs")(e.target.value)} placeholder="e.g. 2.25" data-testid="input-dose-per-lbs" /></Field>
+              <Field label="Dose is per" hint="Blank = the same dose per head">
+                <div className="flex gap-1.5">
+                  <Input type="number" inputMode="decimal" step="any" className="min-w-0" value={perTxt} placeholder="e.g. 1"
+                    onChange={(e) => { setPerTxt(e.target.value); set("dosePerLbs")(Number(e.target.value) > 0 ? (perUnit === "kg" ? Number(e.target.value) * LB_PER_KG : Number(e.target.value)) : ""); }} data-testid="input-dose-per-lbs" />
+                  <select value={perUnit} onChange={(e) => { const u = e.target.value as "lb" | "kg"; setPerUnit(u); if (Number(perTxt) > 0) set("dosePerLbs")(u === "kg" ? Number(perTxt) * LB_PER_KG : Number(perTxt)); }} className="h-9 shrink-0 rounded-md border bg-background px-2 text-sm" aria-label="lb or kg" data-testid="select-dose-per-unit"><option value="kg">kg</option><option value="lb">lb</option></select>
+                </div>
+              </Field>
               <Field label="First dose (mg)" hint="Only if the first dose is different"><Input type="number" inputMode="decimal" step="any" value={v.firstDoseAmount ?? ""} onChange={(e) => set("firstDoseAmount")(e.target.value)} data-testid="input-first-dose" /></Field>
               {v.pillForm !== "capsule" && (
                 <div className="col-span-2 flex items-center justify-between rounded-md border bg-background px-3 py-2">
