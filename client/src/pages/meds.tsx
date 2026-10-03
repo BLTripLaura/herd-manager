@@ -8,6 +8,7 @@ import { PageHeader, Empty } from "@/components/shell";
 import { CalfProSection } from "@/components/calf-pro";
 import { MedDialog, Field, Pick, TreatDialog, MedPick } from "@/components/forms";
 import { useToast } from "@/hooks/use-toast";
+import { ConfirmDelete } from "@/components/confirm-delete";
 import { useList, useRemove, calcDoseMl, doseRuleText, isTabletMg, tabletDose, latestWeight, weighedText, weightChanged, saveDoseWeights, today, shortName, type Medication , repeatText, goatName, regName } from "@/lib/herd";
 
 export default function Meds() {
@@ -16,6 +17,7 @@ export default function Meds() {
   const { data: animals = [] } = useList("animals");
   const { data: weights = [] } = useList("weights");
   const remove = useRemove("medications");
+  const [delMed, setDelMed] = useState<{ id: number; name: string } | null>(null);
   const [dlg, setDlg] = useState<{ open: boolean; med?: Medication }>({ open: false });
   const [calcMed, setCalcMed] = useState<string | null>(null);
   const [calcAnimal, setCalcAnimal] = useState<string | null>(null);
@@ -86,7 +88,7 @@ export default function Meds() {
                   </div>
                   <div className="flex shrink-0">
                     <Button variant="ghost" size="icon" aria-label="Edit" onClick={() => setDlg({ open: true, med: m })} data-testid={`button-edit-med-${m.id}`}><Pencil /></Button>
-                    <Button variant="ghost" size="icon" aria-label="Delete" onClick={() => remove.mutate(m.id)}><Trash2 /></Button>
+                    <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive" aria-label="Delete" onClick={() => setDelMed(m)} data-testid={`button-delete-med-${m.id}`}><Trash2 /></Button>
                   </div>
                 </div>
                 <dl className="mt-4 grid grid-cols-3 gap-3 text-sm">
@@ -106,6 +108,10 @@ export default function Meds() {
         </div>
       )}
       <MedDialog open={dlg.open} onOpenChange={(o) => setDlg({ open: o, med: o ? dlg.med : undefined })} med={dlg.med} />
+      <ConfirmDelete open={!!delMed} onOpenChange={(o) => !o && setDelMed(null)} testId="button-confirm-delete-med"
+        title={delMed ? `Delete ${delMed.name} from the Medicine Cabinet?` : ""}
+        body="Treatments already logged with it stay on each goat's record. This can't be undone and is noted in the system log."
+        onConfirm={async () => { if (delMed) await remove.mutateAsync(delMed.id); setDelMed(null); }} />
     </>
   );
 }

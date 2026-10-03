@@ -521,6 +521,7 @@ export const CARE_TYPES: CareType[] = [
   { name: "Hoof trim", every: 56, hint: "Every 6–8 weeks" },
   { name: "FAMACHA", score: "famacha", every: 14, hint: "Score 1–5 · 4 and 5 need attention" },
   { name: "Body condition", score: "bcs", every: 30, hint: "Score 1–5" },
+  { name: "Temperature", score: "result", hint: "°F · normal 101.5–103.5" },
   { name: "Clipping / shaving" },
   { name: "Udder check", score: "result" },
   { name: "Bath / wash" },

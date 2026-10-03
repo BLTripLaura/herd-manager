@@ -127,6 +127,16 @@ export class DatabaseStorage {
       const before: any = await get("SELECT done FROM tasks WHERE id = ?", id);
       if (before && !before.done) { const row = await db.update(t).set(rest).where(eq(t.id, id)).returning(); await this.rollRepeat(id, todayIso()); return (row as any)[0]; }
     }
+    if (r === "treatments" && ("doseMl" in rest || "medicationId" in rest)) {
+      // Corrected dose: put the old amount back in stock and take out the new one
+      const old: any = await get("SELECT medication_id AS m, dose_ml AS ml FROM treatments WHERE id = ?", id);
+      return tx(async () => {
+        const row = (await db.update(t).set(rest).where(eq(t.id, id)).returning() as any)[0];
+        if (old?.m && old.ml) await this.adjustStock(old.m, Number(old.ml));
+        if (row?.medicationId && row.doseMl) await this.adjustStock(row.medicationId, -Number(row.doseMl));
+        return row;
+      });
+    }
     if (r === "animals") {
       if ("sire" in rest) rest.sire = await this.parentName(rest.sire, id);
       if ("dam" in rest) rest.dam = await this.parentName(rest.dam, id);

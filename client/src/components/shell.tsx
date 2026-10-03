@@ -3,12 +3,12 @@ import { UpdateBanner } from "@/components/update-banner";
 import { useFarmName, appTitle } from "@/lib/farm";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { Sun, Moon, Sunrise, List, Layers, Pill, Heart, Trees, Milk as MilkIcon, Database, Menu, Snowflake, FileBarChart, ChevronRight, ClipboardList, Phone } from "lucide-react";
+import { Sun, Moon, Sunrise, List, Layers, Pill, Heart, Trees, Milk as MilkIcon, Database, Menu, Snowflake, FileBarChart, ChevronRight, ClipboardList, Phone, ScrollText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { QuickSearch } from "@/components/quick-search";
-import { AccountBox } from "@/components/auth";
+import { AccountBox, useMe } from "@/components/auth";
 
 /* ---------- shared app state: theme + batch selection ---------- */
 type Ctx = { dark: boolean; setDark: (v: boolean) => void; selected: number[]; setSelected: (ids: number[]) => void; herdQ: string; setHerdQ: (q: string) => void; reportAsk: ReportAsk | null; setReportAsk: (a: ReportAsk | null) => void; careJob: CareJob | null; setCareJob: (j: CareJob | null) => void };
@@ -55,7 +55,10 @@ const NAV = [
   { href: "/phones", label: "Phone numbers", short: "Phones", icon: Phone, mobile: true },
   { href: "/reports", label: "Reports", icon: FileBarChart, mobile: false },
   { href: "/data", label: "Import & export", icon: Database, mobile: false },
+  { href: "/log", label: "System log", icon: ScrollText, mobile: false, owner: true },
 ];
+/** Menu items this person can use (the system log is Laura's) */
+const useNav = () => { const me = useMe(); return NAV.filter((n) => !(n as any).owner || me?.role === "owner"); };
 
 function isActive(loc: string, href: string) {
   if (href === "/breeding") return loc === "/breeding"; // the plan has its own tab
@@ -73,9 +76,10 @@ function ThemeToggle() {
 
 function NavLinks({ onNav }: { onNav?: () => void }) {
   const [loc] = useLocation();
+  const nav = useNav();
   return (
     <nav className="flex flex-col gap-1">
-      {NAV.map((n) => (
+      {nav.map((n) => (
         <Link key={n.href} href={n.href} onClick={onNav}
           data-testid={`link-nav-${n.label.toLowerCase().replace(/\W+/g, "-")}`}
           className={cn("flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium hover-elevate",
@@ -90,6 +94,7 @@ function NavLinks({ onNav }: { onNav?: () => void }) {
 
 export function Shell({ children }: { children: ReactNode }) {
   const [loc] = useLocation();
+  const nav = useNav();
   const farm = useFarmName();
   useEffect(() => { document.title = appTitle(farm); }, [farm]);
   const [open, setOpen] = useState(false);
@@ -141,7 +146,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
       {/* Mobile bottom nav */}
       <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-8 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
-        {NAV.filter((n) => n.mobile).map((n) => (
+        {nav.filter((n) => n.mobile).map((n) => (
           <Link key={n.href} href={n.href} data-testid={`link-tab-${n.label.toLowerCase().replace(/\W+/g, "-")}`}
             className={cn("flex min-w-0 flex-col items-center gap-0.5 px-0.5 py-2 text-[10px] font-medium leading-tight sm:text-[11px]",
               isActive(loc, n.href) ? "text-primary" : "text-muted-foreground")}>

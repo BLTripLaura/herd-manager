@@ -17,6 +17,10 @@ async function build() {
   alter table herd.treatments add column if not exists dose_mg double precision, add column if not exists dose_detail text;
   alter table herd.tasks add column if not exists repeat_unit text default 'days', add column if not exists reeval boolean default false;
   alter table herd.medications add column if not exists repeat_ongoing boolean default false;`);
+  // System log (who changed what, and when)
+  await pg.unsafe(`create table if not exists herd.audit_log (
+    id bigserial primary key, at timestamptz not null default now(), who text, who_name text, role text,
+    method text, path text, action text, summary text, data text, before text, status integer)`);
   const n = await get<{ n: number }>("SELECT count(*)::int AS n FROM medications");
   const seeded = await get<{ value: string }>("SELECT value FROM app_settings WHERE key = 'medsSeeded'");
   if (!n?.n && !seeded) {

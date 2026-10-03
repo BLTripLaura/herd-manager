@@ -1,7 +1,7 @@
 import { CalfProStatus } from "@/components/calf-pro";
 import { useState } from "react";
 import { Link, useLocation, useRoute } from "wouter";
-import { ArrowLeft, ChevronRight, Users, Flame, Pencil, Syringe, Scale, Heart, Trash2, AlertTriangle, Milk as MilkIcon, Plus } from "lucide-react";
+import { ArrowLeft, ChevronRight, Users, Flame, Pencil, Syringe, Scale, Heart, Trash2, AlertTriangle, Milk as MilkIcon, Plus, Thermometer } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,10 +16,13 @@ import { GiveDoseDialog } from "@/components/give-dose";
 import { ProfilePhoto, PhotoGallery } from "@/components/photos";
 import { ShowsTab, NotesTab } from "@/components/shows-notes";
 import { CareTab } from "@/components/batch-care";
+import { LogCheckDialog } from "@/components/log-check";
+import { EditTreatmentDialog } from "@/components/edit-treatment";
+import { ConfirmDelete } from "@/components/confirm-delete";
 import { PedigreeChart } from "@/components/pedigree";
 import { RegistrationPapers } from "@/components/papers";
 import { MilkBadge, MilkStatusDialog, LactationList } from "@/components/milk-status";
-import { isCalfPro, useList, useSave, useRemove, post, type Task, latestWeight, activeHolds, age, fmtDate, fmtShort, today, relDays, shortName, fmtChip, HORN_LABEL, progenyOf, findByName, normName, daysBetween, heatWatch, heatDates, heatInterval, HEAT_TYPICAL, type Breeding, type Animal, type Heat, usDue, prekidDue, daysInMilk , nextDoses, doseLate, fmtTime, goatName, regName, doseText, everyText, taskDoseText, doseOfText } from "@/lib/herd";
+import { isCalfPro, useList, useSave, useRemove, post, type Task, type Treatment, latestWeight, activeHolds, age, fmtDate, fmtShort, today, relDays, shortName, fmtChip, HORN_LABEL, progenyOf, findByName, normName, daysBetween, heatWatch, heatDates, heatInterval, HEAT_TYPICAL, type Breeding, type Animal, type Heat, usDue, prekidDue, daysInMilk , nextDoses, doseLate, fmtTime, goatName, regName, doseText, everyText, taskDoseText, doseOfText } from "@/lib/herd";
 
 function Info({ label, value }: { label: string; value: React.ReactNode }) {
   return <div><div className="text-xs text-muted-foreground">{label}</div><div className="break-words text-sm font-medium">{value || "—"}</div></div>;
@@ -51,6 +54,10 @@ export default function AnimalPage() {
   const removeWeight = useRemove("weights");
   const [editing, setEditing] = useState(false);
   const [treating, setTreating] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [editT, setEditT] = useState<Treatment | null>(null);
+  const [delT, setDelT] = useState<Treatment | null>(null);
+  const [delW, setDelW] = useState<{ id: number; lbs: number; date: string } | null>(null);
   const [breedOpen, setBreedOpen] = useState<{ open: boolean; b?: Breeding }>({ open: false });
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [tab, setTab] = useState("treatments");
@@ -121,6 +128,7 @@ export default function AnimalPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={() => setEditing(true)} data-testid="button-edit-animal"><Pencil />Edit</Button>
+            <Button variant="outline" size="sm" onClick={() => setChecking(true)} data-testid="button-log-check"><Thermometer />Log check</Button>
             <Button size="sm" onClick={() => setTreating(true)} data-testid="button-treat"><Syringe />Log treatment</Button>
           </div>
         </div>
@@ -244,7 +252,10 @@ export default function AnimalPage() {
                       {t.batchId?.startsWith("EK-") && <Badge variant="secondary">EasyKeeper</Badge>}
                     </div>
                   </div>
-                  <Button variant="ghost" size="icon" aria-label="Delete treatment" onClick={() => removeTreatment.mutate(t.id)} data-testid={`button-delete-treatment-${t.id}`}><Trash2 /></Button>
+                  <div className="flex shrink-0 gap-1">
+                    <Button variant="ghost" size="icon" aria-label="Edit treatment" onClick={() => setEditT(t)} data-testid={`button-edit-treatment-${t.id}`}><Pencil /></Button>
+                    <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive" aria-label="Delete treatment" onClick={() => setDelT(t)} data-testid={`button-delete-treatment-${t.id}`}><Trash2 /></Button>
+                  </div>
                 </li>
               ))}
               {myT.length > tLimit && (
@@ -281,7 +292,7 @@ export default function AnimalPage() {
                 <li key={w.id} className="flex items-center justify-between border-b px-4 py-2.5 last:border-b-0">
                   <span className="text-sm">{fmtDate(w.date)}</span>
                   <span className="flex items-center gap-2 text-sm font-semibold tabular-nums">{w.lbs} lb<span className="text-xs font-normal text-muted-foreground">{w.method}</span>
-                    <Button variant="ghost" size="icon" aria-label="Delete weight" onClick={() => removeWeight.mutate(w.id)}><Trash2 /></Button></span>
+                    <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive" aria-label="Delete weight" onClick={() => setDelW(w)} data-testid={`button-delete-weight-${w.id}`}><Trash2 /></Button></span>
                 </li>
               ))}
             </ul>
@@ -443,6 +454,15 @@ export default function AnimalPage() {
       <BreedingDialog open={breedOpen.open} onOpenChange={(o) => setBreedOpen({ open: o })} doeId={id} breeding={breedOpen.b} />
       <HeatDialog open={heatDlg.open} onOpenChange={(o) => setHeatDlg({ open: o, h: o ? heatDlg.h : undefined })} heat={heatDlg.h} doeId={id} />
       <GiveDoseDialog task={giving} onClose={() => setGiving(null)} />
+      <LogCheckDialog open={checking} onOpenChange={setChecking} animal={a} />
+      <EditTreatmentDialog treatment={editT} onClose={() => setEditT(null)} />
+      <ConfirmDelete open={!!delT} onOpenChange={(o) => !o && setDelT(null)} testId="button-confirm-delete-treatment"
+        title={delT ? `Delete ${delT.medName} on ${fmtShort(delT.date)}?` : ""}
+        body={delT ? `This removes the treatment from ${goatName(a)}'s record${delT.milkClearDate && delT.milkClearDate > today() ? ", including its milk hold" : ""}. To fix a mistake instead, use the pencil to edit it. This can't be undone and is noted in the system log.` : ""}
+        onConfirm={async () => { if (delT) await removeTreatment.mutateAsync(delT.id); setDelT(null); }} />
+      <ConfirmDelete open={!!delW} onOpenChange={(o) => !o && setDelW(null)} testId="button-confirm-delete-weight"
+        title={delW ? `Delete ${delW.lbs} lb on ${fmtShort(delW.date)}?` : ""}
+        onConfirm={async () => { if (delW) await removeWeight.mutateAsync(delW.id); setDelW(null); }} />
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
           <AlertDialogHeader><AlertDialogTitle>Delete {goatName(a)}?</AlertDialogTitle>

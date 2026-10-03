@@ -4,7 +4,7 @@
 import { settings } from "./storage";
 import { all, get, run, tx } from "./db";
 
-const SKIP = new Set(["app_settings", "herd_snapshots", "app_users", "backups"]);
+const SKIP = new Set(["app_settings", "herd_snapshots", "app_users", "backups", "audit_log"]); // the system log is never swapped, restored or copied
 export async function recordTables() {
   return (await all<{ name: string }>("SELECT table_name AS name FROM information_schema.tables WHERE table_schema = 'herd' AND table_type = 'BASE TABLE' ORDER BY table_name"))
     .map((t) => t.name).filter((n) => !SKIP.has(n));

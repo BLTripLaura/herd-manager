@@ -15,6 +15,7 @@ import BreedingPlanPage from "@/pages/breeding-plan";
 import BreedingPage from "@/pages/breeding";
 import MilkPage from "@/pages/milk";
 import DataPage from "@/pages/data";
+import LogPage from "@/pages/log";
 import Pastures from "@/pages/pastures";
 import Phones from "@/pages/phones";
 import Reports from "@/pages/reports";
@@ -40,6 +41,7 @@ function AppRouter() {
         <Route path="/milk" component={MilkPage} />
         <Route path="/reports" component={Reports} />
         <Route path="/data" component={DataPage} />
+        <Route path="/log" component={LogPage} />
         <Route component={NotFound} />
       </Switch>
     </Shell>

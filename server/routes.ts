@@ -5,6 +5,7 @@ import { scanPapers } from "./scan-papers";
 import { storage, resources, settings, type ResourceName } from "./storage";
 import { runBackup, listBackups, backupWorkbook, backupData } from "./backups";
 import { registerAuth } from "./auth";
+import { registerAudit } from "./audit";
 import { herdInfo, snapshot, switchTo, restore, activeHerd } from "./herds";
 import { checkRows, IMPORT_FIELDS } from "./import-match";
 
@@ -23,6 +24,7 @@ function toCsv(rows: any[]) {
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   const { ownerOnly } = registerAuth(app);
+  registerAudit(app, ownerOnly);
   // First request after a deploy: make sure the kid program product is in the medicine list
   try { await ensureSetup(); } catch (e) { console.error("first-time setup failed; will retry", e); }
   void storage.ensureCalfPro().catch(() => {});

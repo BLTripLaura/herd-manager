@@ -7,6 +7,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { SignJWT, jwtVerify } from "jose";
 import { all, get, run, tx } from "./db";
 import { ensureSetup } from "./bootstrap";
+import { auditLogin, registerAuditWriter } from "./audit";
 
 const COOKIE = "gj_session";
 const DAYS = 30;
@@ -117,11 +118,13 @@ export function registerAuth(app: Express) {
     if (!email || !password) return res.status(400).json({ message: "Enter your email or username and password." });
     const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, { method: "POST", headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
     if (r.status === 429) return res.status(429).json({ message: "Too many tries. Wait a few minutes and try again." });
-    if (!r.ok) return res.status(401).json({ message: "That sign-in and password don't match." });
+    if (!r.ok) { await auditLogin(email, false); return res.status(401).json({ message: "That sign-in and password don't match." }); }
     const m = await member(email);
+    if (!m) await auditLogin(email, false);
     if (!m) return res.status(403).json({ message: `${email} isn't on this herd's list. Ask the owner to add you.` });
     const jwt = await new SignJWT({ role: m.role }).setProtectedHeader({ alg: "HS256" }).setSubject(m.email).setIssuedAt().setExpirationTime(`${DAYS}d`).sign(await secret());
     setCookie(res, jwt, DAYS * 86400);
+    await auditLogin(m.email, true, m.name, m.role);
     res.json(m);
   });
   app.post("/api/auth/logout", (_req, res) => { setCookie(res, "", 0); res.json({ ok: true }); });
@@ -140,6 +143,7 @@ export function registerAuth(app: Express) {
     req.user = u;
     next();
   });
+  registerAuditWriter(app);
 
   // Who can sign in (owner only)
   const ownerOnly = (req: Request, res: Response, next: NextFunction) => (req.user?.role === "owner" ? next() : res.status(403).json({ message: "Only the owner can do that." }));
