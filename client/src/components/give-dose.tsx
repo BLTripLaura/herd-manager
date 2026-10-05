@@ -7,7 +7,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Field } from "@/components/forms";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { MoreVertical, SkipForward, OctagonX } from "lucide-react";
+import { MoreVertical, SkipForward, OctagonX, CalendarClock } from "lucide-react";
+import { Pick } from "@/components/forms";
 import { tempNote, goatName, regName, doseText, taskDoseText, doseOfText } from "@/lib/herd";
 import { useList, useSave, post, today, addDays, fmtShort, fmtTime, nowTime, shortName, latestWeight, isWeightDosed, calcDoseMl, saveDoseWeights, weightChanged, isTabletMg, tabletDose, type Task } from "@/lib/herd";
 import { weightOk } from "@/components/weight-check";
@@ -166,6 +167,7 @@ export function DoseMenu({ task, tasks }: { task: Task; tasks: Task[] }) {
   const { data: animals = [] } = useList("animals");
   const { toast } = useToast();
   const [mode, setMode] = useState<null | "skip" | "stop">(null);
+  const [editing, setEditing] = useState(false);
   const [keep, setKeep] = useState<number[]>([]); // goats in a group dose that keep going
   const [busy, setBusy] = useState(false);
   const ids = String(task.animalIds || task.animalId || "").split(",").map(Number).filter(Boolean);
@@ -197,10 +199,12 @@ export function DoseMenu({ task, tasks }: { task: Task; tasks: Task[] }) {
           <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" aria-label="More dose options" data-testid={`button-dose-more-${task.id}`}><MoreVertical className="h-4 w-4" /></Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={() => setEditing(true)} data-testid={`menu-edit-dose-${task.id}`}><CalendarClock className="mr-2 h-4 w-4" />Change schedule</DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setMode("skip")} data-testid={`menu-skip-${task.id}`}><SkipForward className="mr-2 h-4 w-4" />Skip this dose</DropdownMenuItem>
           <DropdownMenuItem onSelect={() => { setKeep([]); setMode("stop"); }} className="text-destructive focus:text-destructive" data-testid={`menu-stop-${task.id}`}><OctagonX className="mr-2 h-4 w-4" />Stop remaining doses</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      <EditScheduleDialog task={editing ? task : null} series={left} onClose={() => setEditing(false)} />
       <AlertDialog open={!!mode} onOpenChange={(o) => !o && setMode(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -231,5 +235,54 @@ export function DoseMenu({ task, tasks }: { task: Task; tasks: Task[] }) {
         </AlertDialogContent>
       </AlertDialog>
     </>
+  );
+}
+
+/** Change a scheduled dose: when it's due, how often it repeats, the amount and notes.
+    The date and time change this dose only; amount, notes and how often apply to the rest of the series too. */
+export function EditScheduleDialog({ task, series, onClose }: { task: Task | null; series: Task[]; onClose: () => void }) {
+  const save = useSave("tasks");
+  const { toast } = useToast();
+  const [v, setV] = useState<any>({});
+  useEffect(() => { if (task) setV({ dueDate: task.dueDate, dueTime: task.dueTime ?? "", repeatEvery: task.repeatEvery ?? "", repeatUnit: task.repeatUnit ?? "days", doseText: task.doseText ?? "", notes: task.notes ?? "" }); }, [task?.id]); // eslint-disable-line
+  if (!task) return null;
+  const med = task.title.split(" — ")[0];
+  const ongoing = !!task.doseNo && !task.doseTotal;
+  const set = (k: string) => (x: any) => setV((p: any) => ({ ...p, [k]: x }));
+  const submit = async () => {
+    if (!v.dueDate) return toast({ title: "Enter the date it's due", variant: "destructive" });
+    const every = Number(v.repeatEvery);
+    if (ongoing && !(every > 0)) return toast({ title: "Enter how often it repeats", variant: "destructive" });
+    const shared: any = { doseText: String(v.doseText).trim() || null, notes: String(v.notes).trim() || null, ...(every > 0 ? { repeatEvery: every, repeatUnit: v.repeatUnit } : {}) };
+    try {
+      await save.mutateAsync({ id: task.id, dueDate: v.dueDate, dueTime: v.dueTime || null, ...shared } as any);
+      for (const k of series.filter((x) => x.id !== task.id)) await save.mutateAsync({ id: k.id, ...shared } as any);
+      toast({ title: "Schedule changed", description: `${med} · next ${fmtShort(v.dueDate)}${v.dueTime ? ` ${fmtTime(v.dueTime)}` : ""}` });
+      onClose();
+    } catch (e: any) { toast({ title: "Could not save", description: String(e?.message ?? e), variant: "destructive" }); }
+  };
+  return (
+    <Dialog open={!!task} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Change schedule</DialogTitle>
+          <DialogDescription>{med} · {doseOfText(task)}. The date and time change this dose; the amount, notes and how often carry on to later doses.</DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Due"><Input type="date" value={v.dueDate ?? ""} onChange={(e) => set("dueDate")(e.target.value)} data-testid="input-sched-date" /></Field>
+          <Field label="Time" hint="Optional"><Input type="time" value={v.dueTime ?? ""} onChange={(e) => set("dueTime")(e.target.value)} data-testid="input-sched-time" /></Field>
+          {(ongoing || task.repeatEvery) && <>
+            <Field label="Repeat every"><Input type="number" inputMode="numeric" min={1} value={v.repeatEvery ?? ""} onChange={(e) => set("repeatEvery")(e.target.value)} data-testid="input-sched-every" /></Field>
+            <Field label="Unit"><Pick value={v.repeatUnit} onChange={set("repeatUnit")} options={[{ value: "days", label: "Days" }, { value: "hours", label: "Hours" }]} testId="select-sched-unit" /></Field>
+          </>}
+          <Field label="Amount to give" className="col-span-2" hint="Shown on the to-do and saved on the record when given, e.g. 15 mg or 2 tablets"><Input value={v.doseText ?? ""} onChange={(e) => set("doseText")(e.target.value)} data-testid="input-sched-amount" /></Field>
+          <Field label="Notes" className="col-span-2"><Input value={v.notes ?? ""} onChange={(e) => set("notes")(e.target.value)} data-testid="input-sched-notes" /></Field>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={submit} disabled={save.isPending} data-testid="button-save-schedule">Save changes</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

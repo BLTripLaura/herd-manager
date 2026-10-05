@@ -19,6 +19,7 @@ function useWide() {
   return wide;
 }
 import { GiveDoseDialog, DoseMenu } from "@/components/give-dose";
+import { TaskMenu } from "@/components/task-menu";
 import { CalfProSection } from "@/components/calf-pro";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -198,6 +199,7 @@ export default function Today() {
           <Button size="sm" variant={d.date <= t ? "default" : "outline"} onClick={() => setGiving(d.task!)} data-testid={`button-give-${d.taskId}`}>{d.date <= t ? "Give" : "Log"}</Button>
         )}
         {d.kind === "dose" && d.task && <DoseMenu task={d.task} tasks={tasks} />}
+        {d.kind === "task" && d.task && <TaskMenu task={d.task} />}
       </li>
     );
   };

@@ -12,13 +12,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Empty } from "@/components/shell";
 import { AnimalDialog, TreatDialog, BreedingDialog, Pick, PedigreeLink, HeatDialog } from "@/components/forms";
-import { GiveDoseDialog } from "@/components/give-dose";
+import { GiveDoseDialog, DoseMenu } from "@/components/give-dose";
 import { ProfilePhoto, PhotoGallery } from "@/components/photos";
 import { ShowsTab, NotesTab } from "@/components/shows-notes";
 import { CareTab } from "@/components/batch-care";
 import { LogCheckDialog } from "@/components/log-check";
 import { EditTreatmentDialog } from "@/components/edit-treatment";
 import { ConfirmDelete } from "@/components/confirm-delete";
+import { TaskMenu } from "@/components/task-menu";
 import { PedigreeChart } from "@/components/pedigree";
 import { RegistrationPapers } from "@/components/papers";
 import { MilkBadge, MilkStatusDialog, LactationList } from "@/components/milk-status";
@@ -81,6 +82,7 @@ export default function AnimalPage() {
   const mh = holds.milk.get(id), meh = holds.meat.get(id);
   const scheduled = tasks.filter((k) => !k.done && k.kind === "dose" && String(k.animalIds || k.animalId || "").split(",").map(Number).includes(id))
     .sort((x, y) => x.dueDate.localeCompare(y.dueDate) || (x.dueTime ?? "").localeCompare(y.dueTime ?? ""));
+  const todos = tasks.filter((k) => !k.done && k.kind === "task" && String(k.animalIds || k.animalId || "").split(",").map(Number).includes(id)).sort((x, y) => x.dueDate.localeCompare(y.dueDate));
   const offspring = progenyOf(a, animals!).sort((x, y) => (y.dob ?? "").localeCompare(x.dob ?? "") || x.name.localeCompare(y.name));
   const inHerd = offspring.filter((k) => k.status === "active").length;
   const byYear = offspring.reduce<[string, Animal[]][]>((acc, k) => {
@@ -220,8 +222,24 @@ export default function AnimalPage() {
               <ul className="divide-y">
                 {nextDoses(scheduled).map(({ task: k, remaining, last }) => (
                   <li key={k.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                    <div className="min-w-0"><div className="truncate text-sm font-medium">{k.doseNo ? `${cap(doseOfText(k))} · ` : ""}{k.title.split(" — ")[0]}{k.doseNo ? "" : [taskDoseText(k), everyText(k.repeatEvery)].filter(Boolean).map((x) => ` · ${x}`).join("")}</div><div className={`text-xs ${doseLate(k) ? "font-semibold text-destructive" : "text-muted-foreground"}`}>{fmtShort(k.dueDate)}{k.dueTime ? ` ${fmtTime(k.dueTime)}` : ""} · {doseLate(k) ? "overdue" : relDays(k.dueDate)}{remaining ? ` · then ${remaining} more, last ${fmtShort(last.dueDate)}${last.dueTime ? ` ${fmtTime(last.dueTime)}` : ""}` : ""}</div></div>
-                    <Button size="sm" variant={k.dueDate <= today() ? "default" : "outline"} onClick={() => setGiving(k)} data-testid={`button-give-${k.id}`}>{k.dueDate <= today() ? "Give" : "Log"}</Button>
+                    <div className="min-w-0"><div className="truncate text-sm font-medium">{k.doseNo ? `${cap(doseOfText(k))} · ` : ""}{k.title.split(" — ")[0]}{[taskDoseText(k), k.doseNo ? null : everyText(k.repeatEvery)].filter(Boolean).map((x) => ` · ${x}`).join("")}</div><div className={`text-xs ${doseLate(k) ? "font-semibold text-destructive" : "text-muted-foreground"}`}>{fmtShort(k.dueDate)}{k.dueTime ? ` ${fmtTime(k.dueTime)}` : ""} · {doseLate(k) ? "overdue" : relDays(k.dueDate)}{remaining ? ` · then ${remaining} more, last ${fmtShort(last.dueDate)}${last.dueTime ? ` ${fmtTime(last.dueTime)}` : ""}` : ""}</div></div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button size="sm" variant={k.dueDate <= today() ? "default" : "outline"} onClick={() => setGiving(k)} data-testid={`button-give-${k.id}`}>{k.dueDate <= today() ? "Give" : "Log"}</Button>
+                      <DoseMenu task={k} tasks={tasks} />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {todos.length > 0 && (
+            <div className="mb-3 rounded-lg border bg-card" data-testid="card-goat-todos">
+              <div className="border-b px-4 py-2.5 text-xs font-semibold text-muted-foreground">To-dos</div>
+              <ul className="divide-y">
+                {todos.map((k) => (
+                  <li key={k.id} className="flex items-center justify-between gap-3 px-4 py-2.5" data-testid={`row-goat-todo-${k.id}`}>
+                    <div className="min-w-0"><div className="truncate text-sm font-medium">{k.title}{k.repeatEvery ? ` · ${everyText(k.repeatEvery)}` : ""}</div><div className="text-xs text-muted-foreground">Due {fmtShort(k.dueDate)}{k.notes ? ` · ${k.notes}` : ""}</div></div>
+                    <TaskMenu task={k} />
                   </li>
                 ))}
               </ul>

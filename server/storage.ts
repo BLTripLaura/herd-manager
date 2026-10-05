@@ -123,9 +123,18 @@ export class DatabaseStorage {
   async update(r: ResourceName, id: number, data: any) {
     const t: any = resources[r].table;
     const { id: _ignore, ...rest } = data ?? {};
-    if (r === "tasks" && rest.done === true) {
-      const before: any = await get("SELECT done FROM tasks WHERE id = ?", id);
-      if (before && !before.done) { const row = await db.update(t).set(rest).where(eq(t.id, id)).returning(); await this.rollRepeat(id, todayIso()); return (row as any)[0]; }
+    if (r === "tasks") {
+      // stopRepeat: mark done without adding the next one (the repeating reminder ends)
+      const stop = !!rest.stopRepeat; delete rest.stopRepeat;
+      if (rest.done === true) {
+        const before: any = await get("SELECT done, due_date FROM tasks WHERE id = ?", id);
+        if (before && !before.done) {
+          const row = await db.update(t).set(rest).where(eq(t.id, id)).returning();
+          // Done early (before it was due): the next one counts from the due date, so checking it off never brings back the same date
+          if (!stop) await this.rollRepeat(id, before.due_date && before.due_date > todayIso() ? before.due_date : todayIso());
+          return (row as any)[0];
+        }
+      }
     }
     if (r === "treatments" && ("doseMl" in rest || "medicationId" in rest)) {
       // Corrected dose: put the old amount back in stock and take out the new one
@@ -307,6 +316,8 @@ export class DatabaseStorage {
           milkClearDate: med ? addDaysIso(date, med.milkWithdrawalDays ?? 0) : null, meatClearDate: med ? addDaysIso(date, med.meatWithdrawalDays ?? 0) : null,
           nextDoseDate: null,
           ...(tabs.doseDetail ? { ...tabs, weightLbs: tabW ?? base.weightLbs ?? null } : base.doseDetail ? { doseMg: base.doseMg ?? null, doseDetail: base.doseDetail } : {}),
+          // Reminders that only say the amount in words (EasyKeeper reminders, "Other" treatments): keep that amount on the record
+          ...(!tabs.doseDetail && !base.doseDetail && !base.doseMl && !base.drops && !(Number(doses[aid]) > 0) && task.doseText ? { doseDetail: String(task.doseText) } : {}),
         });
         if (t.medicationId && t.doseMl) await this.adjustStock(t.medicationId, -t.doseMl);
         created.push(t);
