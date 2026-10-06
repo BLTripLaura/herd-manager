@@ -136,7 +136,7 @@ export function registerAuth(app: Express) {
 
   // Everything else under /api needs a signed-in person (scheduled jobs use their own key)
   app.use("/api", async (req: Request, res: Response, next: NextFunction) => {
-    if (req.path.startsWith("/auth/") || req.path.startsWith("/cron/")) return next();
+    if (req.path.startsWith("/auth/") || req.path.startsWith("/cron/") || req.path.startsWith("/public/")) return next(); // public = shared document links
     if (req.method === "GET" && req.path === "/backups/excel" && backupKeyOk(req)) { req.user = { email: "backup", name: "Weekly backup", role: "helper" }; return next(); }
     const u = await currentUser(req);
     if (!u) return res.status(401).json({ message: "Please sign in." });

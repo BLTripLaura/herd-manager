@@ -16,6 +16,8 @@ import BreedingPage from "@/pages/breeding";
 import MilkPage from "@/pages/milk";
 import DataPage from "@/pages/data";
 import LogPage from "@/pages/log";
+import { ReferenceDocs, SaleDocs } from "@/pages/documents";
+import SharedDoc from "@/pages/shared-doc";
 import Pastures from "@/pages/pastures";
 import Phones from "@/pages/phones";
 import Reports from "@/pages/reports";
@@ -42,6 +44,8 @@ function AppRouter() {
         <Route path="/reports" component={Reports} />
         <Route path="/data" component={DataPage} />
         <Route path="/log" component={LogPage} />
+        <Route path="/reference" component={ReferenceDocs} />
+        <Route path="/sale-docs" component={SaleDocs} />
         <Route component={NotFound} />
       </Switch>
     </Shell>
@@ -49,13 +53,15 @@ function AppRouter() {
 }
 
 function App() {
+  // A texted/emailed document link opens without signing in
+  const shared = typeof window !== "undefined" ? (window.location.hash.match(/^#\/shared\/([\w-]+)/)?.[1] ?? null) : null;
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AppProvider>
           <Toaster />
           <Router hook={useHashLocation}>
-            <ErrorBoundary><AuthGate><AppRouter /></AuthGate></ErrorBoundary>
+            <ErrorBoundary>{shared ? <SharedDoc token={shared} /> : <AuthGate><AppRouter /></AuthGate>}</ErrorBoundary>
           </Router>
         </AppProvider>
       </TooltipProvider>

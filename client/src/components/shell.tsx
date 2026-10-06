@@ -3,7 +3,7 @@ import { UpdateBanner } from "@/components/update-banner";
 import { useFarmName, appTitle } from "@/lib/farm";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { Sun, Moon, Sunrise, List, Layers, Pill, Heart, Trees, Milk as MilkIcon, Database, Menu, Snowflake, FileBarChart, ChevronRight, ClipboardList, Phone, ScrollText } from "lucide-react";
+import { Sun, Moon, Sunrise, List, Layers, Pill, Heart, Trees, Milk as MilkIcon, Database, Menu, Snowflake, FileBarChart, ChevronRight, ClipboardList, Phone, ScrollText, BookOpen, FileSignature } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -54,6 +54,8 @@ const NAV = [
   { href: "/milk", label: "Milk test", icon: MilkIcon, mobile: false },
   { href: "/phones", label: "Phone numbers", short: "Phones", icon: Phone, mobile: true },
   { href: "/reports", label: "Reports", icon: FileBarChart, mobile: false },
+  { href: "/reference", label: "Reference docs", short: "Reference", icon: BookOpen, mobile: false },
+  { href: "/sale-docs", label: "Sale docs", short: "Sale docs", icon: FileSignature, mobile: false },
   { href: "/data", label: "Import & export", icon: Database, mobile: false },
   { href: "/log", label: "System log", icon: ScrollText, mobile: false, owner: true },
 ];

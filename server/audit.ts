@@ -13,7 +13,7 @@ const LABEL: Record<string, string> = {
   animals: "goat", weights: "weight", medications: "medicine", treatments: "treatment", breedings: "breeding", milk: "milk record",
   tasks: "to-do", pastures: "pasture", pastureMoves: "pasture move", outsideBucks: "outside buck", heats: "heat", shows: "show",
   animalNotes: "note", lactations: "lactation", care: "care record", breedingPlans: "breeding plan", contacts: "phone contact",
-  photos: "photo", papers: "paper", users: "login", settings: "setting",
+  photos: "photo", papers: "paper", documents: "document", users: "login", settings: "setting",
 };
 const SECRET = /pass(word)?|token|secret|key$/i;
 /** Copy of what was sent, with passwords removed and big pictures shortened */
@@ -62,6 +62,7 @@ async function summarize(req: Request, before: any): Promise<{ action: string; s
   else if (a === "tasks" && c === "give") { action = body.stopAfter ? "Gave last dose" : "Gave dose"; const t = await get("SELECT title FROM tasks WHERE id = ?", Number(b)).catch(() => null); what = (t as any)?.title ?? `to-do #${b}`; }
   else if (a === "tasks" && c === "stop") { action = "Stopped doses"; const t = await get("SELECT title FROM tasks WHERE id = ?", Number(b)).catch(() => null); what = (t as any)?.title ?? `to-do #${b}`; }
   else if (a === "tasks" && c === "skip") { action = "Skipped dose"; const t = await get("SELECT title FROM tasks WHERE id = ?", Number(b)).catch(() => null); what = (t as any)?.title ?? `to-do #${b}`; }
+  else if (a === "documents" && c === "share") { action = "Made a link to send a document"; what = before ? `${before.title} (${before.cabinet === "sale" ? "Sale" : "Reference"} documents) · link works 7 days` : `#${b}`; }
   else if (a && b === "bulk") { action = `Added ${LABEL[a] ?? a}s`; what = `${Array.isArray(body) ? body.length : (body.rows?.length ?? "")} records`; }
   else if (a && LABEL[a] && parts.length === 1 && m === "POST") { action = `Added ${LABEL[a]}`; what = describe(body); }
   else if (a && LABEL[a] && parts.length === 2 && (m === "PATCH" || m === "PUT")) {
@@ -100,7 +101,7 @@ export function registerAudit(app: Express, ownerOnly: (req: Request, res: Respo
     Registered right after the sign-in check so every change (logins, settings, records) is covered. */
 export function registerAuditWriter(app: Express) {
   app.use("/api", async (req: Request, res: Response, next: NextFunction) => {
-    if (["GET", "HEAD", "OPTIONS"].includes(req.method) || req.path.startsWith("/cron/") || req.path.startsWith("/auth/")) return next();
+    if (["GET", "HEAD", "OPTIONS"].includes(req.method) || req.path.startsWith("/cron/") || req.path.startsWith("/auth/") || /^\/documents\/\d+\/(chunk|finish)/.test(req.path)) return next();
     try {
       const parts = req.path.split("/").filter(Boolean);
       let before: any = null;
@@ -111,6 +112,8 @@ export function registerAuditWriter(app: Express) {
         [before] = await db.select().from(t).where(eq(t.id, Number(parts[1])));
       } else if (req.method === "DELETE" && parts.length === 2 && ["photos", "papers"].includes(parts[0])) {
         before = await get(`SELECT id, animal_id AS "animalId", date, ${parts[0] === "photos" ? "caption" : "label"} AS label FROM ${parts[0] === "photos" ? "animal_photos" : "animal_papers"} WHERE id = ?`, Number(parts[1])).catch(() => null);
+      } else if (parts[0] === "documents" && Number(parts[1]) > 0) {
+        before = await get(`SELECT id, cabinet, title, folder, file_name AS "fileName", doc_date AS "docDate" FROM herd.documents WHERE id = ?`, Number(parts[1])).catch(() => null);
       } else if (req.method === "DELETE" && parts[0] === "milk" && parts[1] === "test" && parts[2]) {
         before = { date: parts[2], records: (await all("SELECT animal_id AS \"animalId\", date, lbs FROM milk WHERE date = ?", parts[2]).catch(() => [])) };
       }

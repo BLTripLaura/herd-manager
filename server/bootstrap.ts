@@ -17,6 +17,13 @@ async function build() {
   alter table herd.treatments add column if not exists dose_mg double precision, add column if not exists dose_detail text;
   alter table herd.tasks add column if not exists repeat_unit text default 'days', add column if not exists reeval boolean default false;
   alter table herd.medications add column if not exists repeat_ongoing boolean default false;`);
+  // Filing cabinets: Reference and Sale documents (files kept in pieces), and 7-day share links
+  await pg.unsafe(`create table if not exists herd.documents (
+    id serial primary key, cabinet text not null, title text not null, folder text, animal_id integer, doc_date text, notes text,
+    file_name text not null, mime text, size integer, chunks integer not null default 1, ready boolean not null default false,
+    thumb text, created_at timestamptz not null default now(), created_by text);
+  create table if not exists herd.document_chunks (doc_id integer not null, n integer not null, data text not null, primary key (doc_id, n));
+  create table if not exists herd.document_shares (token text primary key, doc_id integer not null, expires_at timestamptz not null, created_at timestamptz not null default now(), created_by text);`);
   // System log (who changed what, and when)
   await pg.unsafe(`create table if not exists herd.audit_log (
     id bigserial primary key, at timestamptz not null default now(), who text, who_name text, role text,
