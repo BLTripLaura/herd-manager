@@ -103,7 +103,7 @@ export default function Today() {
       const names = ids.map((id) => byId.get(id)).filter(Boolean).map((a) => goatName(a!));
       const sub = names.length <= 3 ? names.join(", ") : `${names.slice(0, 3).join(", ")} +${names.length - 3} more`;
       const more = k.dueTime && remaining ? ` · ${moreToday ? `${moreToday} more today` : `${remaining} more`}, last ${fmtShort(last.dueDate)}${last.dueTime ? ` ${fmtTime(last.dueTime)}` : ""}` : "";
-      items.push({ key: `t${k.id}`, date: k.dueDate, time: k.dueTime, title: k.title.split(" — ")[0], sub: k.doseNo ? `${cap(doseOfText(k))}${k.reeval ? " · Re-evaluate" : ""} · ${sub}${more}` : [sub, taskDoseText(k), everyText(k.repeatEvery), k.notes].filter(Boolean).join(" · "), href: ids.length === 1 ? `/animal/${ids[0]}` : undefined, kind: "dose", taskId: k.id, task: k });
+      items.push({ key: `t${k.id}`, date: k.dueDate, time: k.dueTime, title: sub ? `${sub}: ${k.title.split(" — ")[0]}` : k.title.split(" — ")[0], sub: k.doseNo ? `${cap(doseOfText(k))}${k.reeval ? " · Re-evaluate" : ""}${more}` : [taskDoseText(k), everyText(k.repeatEvery), k.notes].filter(Boolean).join(" · ") || undefined, href: ids.length === 1 ? `/animal/${ids[0]}` : undefined, kind: "dose", taskId: k.id, task: k });
     }
     for (const k of tasks) {
       if (k.done || k.dueDate > horizon) continue;
@@ -112,8 +112,8 @@ export default function Today() {
         const ids = String(k.animalIds || "").split(",").map(Number).filter(Boolean);
         const names = ids.map((id) => byId.get(id)).filter(Boolean).map((a) => goatName(a!));
         const who = names.length ? (names.length <= 3 ? names.join(", ") : `${names.slice(0, 3).join(", ")} +${names.length - 3} more`) : "";
-        const sub = [who, everyText(k.repeatEvery), k.notes].filter(Boolean).join(" · ") || undefined;
-        items.push({ key: `t${k.id}`, date: k.dueDate, title: k.title, sub, href: ids.length === 1 ? `/animal/${ids[0]}` : undefined, kind: "task", taskId: k.id, task: k });
+        const sub = [everyText(k.repeatEvery), k.notes].filter(Boolean).join(" · ") || undefined;
+        items.push({ key: `t${k.id}`, date: k.dueDate, title: who ? `${who}: ${k.title}` : k.title, sub, href: ids.length === 1 ? `/animal/${ids[0]}` : undefined, kind: "task", taskId: k.id, task: k });
       }
     }
     // Kid CD&T series: 4 weeks old, then 4 weeks later (yearly boosters live in their own section)
