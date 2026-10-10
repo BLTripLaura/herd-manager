@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Field } from "@/components/forms";
-import { useList, post, today, addDays, fmtShort, shortName, latestWeight, calcDoseMl, isCdt, isWeightDosed, saveDoseWeights, GESTATION_DAYS, RECHECK_DAYS, type Breeding, type Animal, goatName, regName } from "@/lib/herd";
+import { useList, post, today, addDays, fmtShort, shortName, latestWeight, calcDoseMl, isCdt, isWeightDosed, saveDoseWeights, gestationDays, RECHECK_DAYS, type Breeding, type Animal, goatName, regName } from "@/lib/herd";
 import { apiRequest } from "@/lib/queryClient";
 import { invalidateAll } from "@/lib/herd";
 import { cn } from "@/lib/utils";
@@ -20,7 +20,7 @@ export function UltrasoundDialog({ breeding, onOpenChange }: { breeding: Breedin
   const [saving, setSaving] = useState(false);
   useEffect(() => { if (breeding) { setResult(""); setDate(today()); setNotes(breeding.usNotes ?? ""); } }, [breeding]);
   const doe = animals.find((a) => a.id === breeding?.doeId);
-  const due = breeding ? addDays(breeding.date, GESTATION_DAYS) : "";
+  const due = breeding ? addDays(breeding.date, gestationDays(doe)) : "";
   const save = async () => {
     if (!breeding || !result) return toast({ title: "Pick a result", variant: "destructive" });
     setSaving(true);

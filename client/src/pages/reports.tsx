@@ -18,7 +18,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { PageHeader, Empty } from "@/components/shell";
 import { Pick } from "@/components/forms";
 import {
-  useList, age, fmtShort, HORN_LABEL, shortName, normName, latestWeight, progenyOf, activeHolds, addDays, daysBetween, GESTATION_DAYS, API_BASE, breedKey, colorWords, breedOptions, colorOptions, usDue, US_LABEL, daysInMilk, MILK_STATUS,
+  useList, age, fmtShort, HORN_LABEL, shortName, normName, latestWeight, progenyOf, activeHolds, addDays, daysBetween, gestationDays, API_BASE, breedKey, colorWords, breedOptions, colorOptions, usDue, US_LABEL, daysInMilk, MILK_STATUS,
   type Animal, fmtTime, goatName, regName } from "@/lib/herd";
 import { cn } from "@/lib/utils";
 
@@ -240,7 +240,7 @@ export default function Reports() {
           ],
           rows: breedings.map((b) => {
             const a = aById.get(b.doeId);
-            return { id: `b${b.id}`, animal: a, date: b.date, v: { ...base(a), buck: shortName(b.buck), source: b.buckSource === "frozen" ? "Tank (AI)" : b.buckSource === "guest" ? "Guest buck" : "Herd", method: b.method ?? "", straws: b.straws, due: b.dueDate ?? addDays(b.date, GESTATION_DAYS), usdue: b.status === "bred" ? usDue(b) : "", usdate: b.usDate ?? "", usresult: b.usResult ? US_LABEL[b.usResult] ?? b.usResult : "", usnotes: b.usNotes ?? "",
+            return { id: `b${b.id}`, animal: a, date: b.date, v: { ...base(a), buck: shortName(b.buck), source: b.buckSource === "frozen" ? "Tank (AI)" : b.buckSource === "guest" ? "Guest buck" : "Herd", method: b.method ?? "", straws: b.straws, due: b.dueDate ?? addDays(b.date, gestationDays(a)), usdue: b.status === "bred" ? usDue(b) : "", usdate: b.usDate ?? "", usresult: b.usResult ? US_LABEL[b.usResult] ?? b.usResult : "", usnotes: b.usNotes ?? "",
               pkdue: b.dueDate && (b.status === "confirmed" || b.prekidDate) ? addDays(b.dueDate, -30) : "", pkgiven: b.prekidDate ?? "", bstatus: b.status, kidded: b.kiddingDate ?? "", kids: b.kidsBorn, notes: b.notes ?? "" } };
           }),
         };

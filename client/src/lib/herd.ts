@@ -269,6 +269,11 @@ export function regName(a: { name: string; barnName?: string | null } | null | u
 }
 
 export const GESTATION_DAYS = 150;
+/** Nigerian Dwarf does carry about 145 days; every other breed is figured at 150 */
+export const NIGERIAN_GESTATION_DAYS = 145;
+export function gestationDays(doe?: { breed?: string | null } | null) {
+  return /nigerian/i.test(doe?.breed ?? "") ? NIGERIAN_GESTATION_DAYS : GESTATION_DAYS;
+}
 /** Ultrasound is requested this many days after breeding */
 export const ULTRASOUND_DAYS = 30;
 /** CD&T and BoSe are given this many days before the due date */

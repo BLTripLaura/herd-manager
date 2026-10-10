@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useBarnHours } from "@/components/barn-hours";
 import {
-  useList, useSave, post, today, addDays, calcDoseMl, latestWeight, isWeightDosed, saveDoseWeights, tabletDose, tabletSizes, tabletFields, isTabletMg, type TabletDose, perKg, LB_PER_KG, DOSE_UNITS, GESTATION_DAYS, shortName, doseSchedule, dosesInDays, fmtShort, fmtTime, nowTime, repeatText, type RepeatUnit, type BarnHours,
+  useList, useSave, post, today, addDays, calcDoseMl, latestWeight, isWeightDosed, saveDoseWeights, tabletDose, tabletSizes, tabletFields, isTabletMg, type TabletDose, perKg, LB_PER_KG, DOSE_UNITS, GESTATION_DAYS, gestationDays, shortName, doseSchedule, dosesInDays, fmtShort, fmtTime, nowTime, repeatText, type RepeatUnit, type BarnHours,
   type Animal, type Medication, type Breeding, type OutsideBuck, type Heat, HEAT_SIGNS, doseRuleText, heatDates, heatInterval, useRemove, fmtDate, ULTRASOUND_DAYS, PREKID_DAYS, RECHECK_DAYS, usDue, US_LABEL, goatName, regName, matchesAnimal, idMatch, isDrops, pillUnitOf, ORAL_UNITS, hasSide, SIDES, TUBE_AMOUNTS } from "@/lib/herd";
 import { ExternalLink, Plus, ChevronsUpDown } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -814,10 +814,10 @@ export function BreedingDialog({ open, onOpenChange, doeId, breeding, method, pr
     setSaving(true);
     try {
       const { id, ...rest } = v;
-      await post("/api/breedings/save", { ...rest, id: breeding?.id, usResult: v.usResult || null, usDate: v.usResult ? (v.usDate || today()) : v.usDate || null, doeId: Number(v.doeId), dueDate: addDays(v.date, GESTATION_DAYS), kidsBorn: num(v.kidsBorn),
+      await post("/api/breedings/save", { ...rest, id: breeding?.id, usResult: v.usResult || null, usDate: v.usResult ? (v.usDate || today()) : v.usDate || null, doeId: Number(v.doeId), dueDate: addDays(v.date, gestationDays(animals.find((a) => a.id === Number(v.doeId)))), kidsBorn: num(v.kidsBorn),
         straws: ai ? strawsN : null, kiddingDate: v.status === "kidded" ? (v.kiddingDate || today()) : v.kiddingDate ?? null, doeInMilk: v.status === "kidded" && freshen });
       toast({ title: breeding ? "Breeding updated" : "Breeding recorded",
-        description: ai ? `${strawsN} straw${strawsN > 1 ? "s" : ""} deducted · ${available - strawsN} left of ${shortName(v.buck)}` : `Due ${fmtShort(addDays(v.date, GESTATION_DAYS))}` });
+        description: ai ? `${strawsN} straw${strawsN > 1 ? "s" : ""} deducted · ${available - strawsN} left of ${shortName(v.buck)}` : `Due ${fmtShort(addDays(v.date, gestationDays(animals.find((a) => a.id === Number(v.doeId)))))}` });
       onOpenChange(false);
     } catch (e: any) { toast({ title: "Could not save", description: String(e.message ?? e), variant: "destructive" }); }
     finally { setSaving(false); }
@@ -836,13 +836,14 @@ export function BreedingDialog({ open, onOpenChange, doeId, breeding, method, pr
   const setUs = (r: string) => setV((p: any) => ({ ...p, usResult: r === "none" ? null : r, usDate: r === "none" ? null : p.usDate || today(),
     status: p.status === "kidded" ? p.status : r === "positive" ? "confirmed" : r === "negative" ? "open" : "bred" }));
   const usScheduled = v.date ? usDue({ ...(v as any), usResult: v.usResult }) : null;
-  const dueNow = v.date ? addDays(v.date, GESTATION_DAYS) : null;
+  const gDays = gestationDays(animals.find((a) => a.id === Number(v.doeId)));
+  const dueNow = v.date ? addDays(v.date, gDays) : null;
   const legacy = !v.buckSource && v.buck; // older record typed by hand
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md">
-        <DialogHeader><DialogTitle>{breeding ? "Update breeding" : "Record breeding"}</DialogTitle><DialogDescription>Due date is set {GESTATION_DAYS} days after breeding.</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle>{breeding ? "Update breeding" : "Record breeding"}</DialogTitle><DialogDescription>Due date is set {v.doeId ? `${gDays} days` : "150 days (145 for Nigerian Dwarf)"} after breeding.</DialogDescription></DialogHeader>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Doe" className="col-span-2"><GoatPick value={v.doeId} onChange={set("doeId")} goats={does} placeholder="Choose a doe" testId="select-doe" /></Field>
           <Field label="Date bred"><Input type="date" value={v.date} onChange={(e) => set("date")(e.target.value)} data-testid="input-bred-date" /></Field>

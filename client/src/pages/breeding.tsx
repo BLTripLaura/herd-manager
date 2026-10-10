@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader, Empty, Stat } from "@/components/shell";
 import { BreedingDialog, OutsideBuckDialog, PedigreeLink, HeatDialog } from "@/components/forms";
-import { useList, fmtShort, fmtDate, relDays, daysBetween, today, shortName, GESTATION_DAYS, heatWatch, HEAT_TYPICAL, type Breeding, type OutsideBuck, type Heat, type HeatWatchItem, addDays, usDue, needsUltrasound, prekidDue, ULTRASOUND_DAYS, PREKID_DAYS, goatName, regName } from "@/lib/herd";
+import { useList, fmtShort, fmtDate, relDays, daysBetween, today, shortName, heatWatch, HEAT_TYPICAL, type Breeding, type OutsideBuck, type Heat, type HeatWatchItem, addDays, usDue, needsUltrasound, prekidDue, ULTRASOUND_DAYS, PREKID_DAYS, goatName, regName } from "@/lib/herd";
 
 export default function BreedingPage() {
   const { data: breedings = [] } = useList("breedings");
@@ -79,7 +79,7 @@ export default function BreedingPage() {
   const Row = ({ b }: { b: Breeding }) => {
     const doe = byId.get(b.doeId);
     const days = b.dueDate ? daysBetween(t, b.dueDate) : null;
-    const pct = b.dueDate ? Math.min(100, Math.max(0, (daysBetween(b.date, t) / GESTATION_DAYS) * 100)) : 0;
+    const pct = b.dueDate ? Math.min(100, Math.max(0, (daysBetween(b.date, t) / Math.max(1, daysBetween(b.date, b.dueDate))) * 100)) : 0;
     return (
       <li>
         <div role="button" tabIndex={0} onClick={() => setDlg({ open: true, b })} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setDlg({ open: true, b })} className="w-full cursor-pointer border-b px-4 py-3 text-left hover-elevate" data-testid={`row-breeding-${b.id}`}>
@@ -115,7 +115,7 @@ export default function BreedingPage() {
 
   return (
     <>
-      <PageHeader title="Breeding & kidding" sub={`Due dates use a ${GESTATION_DAYS}-day gestation.`}>
+      <PageHeader title="Breeding & kidding" sub="Due dates use a 150-day gestation, 145 days for Nigerian Dwarf does.">
         <Button variant="outline" asChild><Link href="/breeding/plan" data-testid="link-breeding-plan"><ClipboardList />Breeding plan</Link></Button>
         <Button variant="outline" asChild><Link href="/tank" data-testid="link-tank"><Snowflake />Tank · {tankOnHand} straws</Link></Button>
         <Button variant="outline" onClick={() => setHdlg({ open: true })} data-testid="button-log-heat"><Flame />Log heat</Button>
