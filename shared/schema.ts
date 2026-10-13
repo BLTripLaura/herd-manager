@@ -259,6 +259,26 @@ export const shows = sqliteTable("shows", {
 export const insertShowSchema = createInsertSchema(shows).omit({ id: true });
 export type Show = typeof shows.$inferSelect;
 
+/** Travel list for a CVI (health certificate): which goats go where, when and why */
+export const trips = sqliteTable("trips", {
+  id: serial("id").primaryKey(),
+  shipDate: text("ship_date").notNull(),
+  returnDate: text("return_date"),
+  purpose: text("purpose").notNull(),
+  destName: text("dest_name").notNull(), // show, farm or buyer
+  destAddress: text("dest_address"),
+  destCity: text("dest_city"),
+  destState: text("dest_state"),
+  destZip: text("dest_zip"),
+  destPhone: text("dest_phone"),
+  consignee: text("consignee"), // person receiving / show secretary, if different
+  carrier: text("carrier"),
+  animalIds: text("animal_ids"), // comma list in the order added
+  notes: text("notes"),
+});
+export const insertTripSchema = createInsertSchema(trips).omit({ id: true });
+export type Trip = typeof trips.$inferSelect;
+
 /** Free-form dated notes about an animal ("Other" tab) */
 export const animalNotes = sqliteTable("animal_notes", {
   id: serial("id").primaryKey(),

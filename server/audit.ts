@@ -12,7 +12,7 @@ export const AUDIT_SQL = `create table if not exists herd.audit_log (
 const LABEL: Record<string, string> = {
   animals: "goat", weights: "weight", medications: "medicine", treatments: "treatment", breedings: "breeding", milk: "milk record",
   tasks: "to-do", pastures: "pasture", pastureMoves: "pasture move", outsideBucks: "outside buck", heats: "heat", shows: "show",
-  animalNotes: "note", lactations: "lactation", care: "care record", breedingPlans: "breeding plan", contacts: "phone contact",
+  animalNotes: "note", lactations: "lactation", care: "care record", breedingPlans: "breeding plan", contacts: "phone contact", trips: "travel list",
   photos: "photo", papers: "paper", documents: "document", users: "login", settings: "setting",
 };
 const SECRET = /pass(word)?|token|secret|key$/i;

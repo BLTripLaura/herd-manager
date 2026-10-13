@@ -38,6 +38,7 @@ export const resources = {
   care: { table: s.care, schema: s.insertCareSchema },
   breedingPlans: { table: s.breedingPlans, schema: s.insertBreedingPlanSchema },
   contacts: { table: s.contacts, schema: s.insertContactSchema },
+  trips: { table: s.trips, schema: s.insertTripSchema },
 } as const;
 export const IN_MILK = ["milking", "mastitis", "drying"];
 export type ResourceName = keyof typeof resources;

@@ -3,15 +3,15 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { findParent } from "@shared/breed";
 import { isTabletMg, tabletRuleText } from "@shared/dose";
 export { TABLET_MG, LB_PER_KG, perKg, isTabletMg, tabletDose, tabletFields, tabletSizes, tabletRuleText, type TabletDose } from "@shared/dose";
-import type { Animal, Weight, Medication, Treatment, Breeding, Milk, Task, Pasture, PastureMove, OutsideBuck, Heat, Show, AnimalNote, Lactation, Care, BreedingPlan, Contact } from "@shared/schema";
+import type { Animal, Weight, Medication, Treatment, Breeding, Milk, Task, Pasture, PastureMove, OutsideBuck, Heat, Show, AnimalNote, Lactation, Care, BreedingPlan, Contact, Trip } from "@shared/schema";
 
-export type { Animal, Weight, Medication, Treatment, Breeding, Milk, Task, Pasture, PastureMove, OutsideBuck, Heat, Show, AnimalNote, Lactation, Care, BreedingPlan, Contact };
+export type { Animal, Weight, Medication, Treatment, Breeding, Milk, Task, Pasture, PastureMove, OutsideBuck, Heat, Show, AnimalNote, Lactation, Care, BreedingPlan, Contact, Trip };
 
 export const API_BASE = "__PORT_5000__".startsWith("__") ? "" : "__PORT_5000__";
 
 type ResMap = {
   animals: Animal; weights: Weight; medications: Medication; treatments: Treatment;
-  breedings: Breeding; milk: Milk; tasks: Task; pastures: Pasture; pastureMoves: PastureMove; outsideBucks: OutsideBuck; heats: Heat; shows: Show; animalNotes: AnimalNote; lactations: Lactation; care: Care; breedingPlans: BreedingPlan; contacts: Contact;
+  breedings: Breeding; milk: Milk; tasks: Task; pastures: Pasture; pastureMoves: PastureMove; outsideBucks: OutsideBuck; heats: Heat; shows: Show; animalNotes: AnimalNote; lactations: Lactation; care: Care; breedingPlans: BreedingPlan; trips: Trip; contacts: Contact;
 };
 export type Res = keyof ResMap;
 

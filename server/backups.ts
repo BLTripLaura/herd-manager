@@ -40,7 +40,7 @@ const SHEETS: [string, string][] = [
   ["animals", "Animals"], ["treatments", "Treatments"], ["care_records", "Care"], ["weights", "Weights"], ["medications", "Medications"],
   ["breedings", "Breedings"], ["breeding_plans", "Breeding plans"], ["heats", "Heats"], ["milk", "Milk tests"], ["lactations", "Lactations"],
   ["tasks", "Tasks"], ["pastures", "Pastures"], ["pasture_moves", "Pasture moves"], ["outside_bucks", "Tank & guest bucks"],
-  ["shows", "Shows"], ["animal_notes", "Animal notes"],
+  ["shows", "Shows"], ["animal_notes", "Animal notes"], ["trips", "Travel lists"],
 ];
 
 /** Every record in one Excel workbook, one sheet per kind of record. Uses a saved copy when given, else the live herd. */
