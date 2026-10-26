@@ -2,8 +2,20 @@
 import type { Animal, Treatment, Breeding, Trip } from "@shared/schema";
 import { goatName, daysBetween, isCdt, fmtDate } from "@/lib/herd";
 
-export type Origin = { owner?: string; farm?: string; address?: string; city?: string; state?: string; zip?: string; phone?: string; email?: string; premisesId?: string; flockId?: string; vetName?: string; vetEmail?: string };
+/** Farm information page: everything about the farm that goes on a CVI */
+export type Origin = {
+  owner?: string; farm?: string; address?: string; city?: string; state?: string; zip?: string; county?: string;
+  mailing?: string; phone?: string; cell?: string; email?: string;
+  premisesId?: string; flockId?: string; sfcp?: string; herdHealth?: string;
+  adgaHerd?: string; herdTattoo?: string; adgaMember?: string;
+  carrier?: string; vehicle?: string;
+  vetName?: string; vetEmail?: string; // older single-vet fields
+};
 export const ORIGIN_KEY = ["/api/settings/cviOrigin"];
+export type Vet = { id: string; name: string; clinic?: string; phone?: string; email?: string; address?: string; city?: string; state?: string; zip?: string; accreditation?: string; notes?: string; primary?: boolean };
+export const VETS_KEY = ["/api/settings/vets"];
+export const vetLabel = (v: Vet) => [v.name, v.clinic].filter(Boolean).join(" · ");
+export const vetAddress = (v: Vet) => [v.address, [v.city, [v.state, v.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ")].filter(Boolean).join(", ");
 export const PURPOSES = ["Exhibition / show", "Sale", "Breeding", "Return to origin", "Lease", "Veterinary care", "Personal / pet", "Other"];
 
 export const idsOf = (t?: Pick<Trip, "animalIds"> | null) => String(t?.animalIds ?? "").split(",").map(Number).filter(Boolean);
@@ -68,22 +80,25 @@ export const originText = (o: Origin) => line(o.farm || o.owner, o.address, line
 export const fileBase = (t: Trip) => `CVI list ${t.shipDate} ${t.destName}`.replace(/[^\w\- ]+/g, "").replace(/\s+/g, " ").trim();
 
 /** Excel workbook: a Trip sheet (shipment details) and an Animals sheet (one row per goat) */
-export async function workbook(t: Trip, o: Origin, list: CviRow[]): Promise<File> {
+export async function workbook(t: Trip, o: Origin, list: CviRow[], vet?: Vet | null): Promise<File> {
   const ExcelJS: any = (await import("exceljs")).default ?? (await import("exceljs"));
   const wb = new ExcelJS.Workbook(); wb.creator = "Herd Manager";
   const s = wb.addWorksheet("Trip");
   const info: [string, string][] = [
     ["Certificate of Veterinary Inspection — travel list", ""], ["", ""],
     ["Shipping date", fmtDate(t.shipDate)], ["Return date", t.returnDate ? fmtDate(t.returnDate) : ""], ["Purpose of movement", t.purpose], ["Number of goats", String(list.length)], ["Species", "Goat (caprine)"],
-    ["", ""], ["CONSIGNOR / ORIGIN", ""], ["Owner", o.owner ?? ""], ["Farm", o.farm ?? ""], ["Address", o.address ?? ""], ["City, State ZIP", line(o.city, [o.state, o.zip].filter(Boolean).join(" "))], ["Phone", o.phone ?? ""], ["Email", o.email ?? ""],
-    ["Premises ID (PIN)", o.premisesId ?? ""], ["Scrapie flock ID", o.flockId ?? ""],
+    ["", ""], ["CONSIGNOR / ORIGIN", ""], ["Owner", o.owner ?? ""], ["Farm", o.farm ?? ""], ["Address", o.address ?? ""], ["City, State ZIP", line(o.city, [o.state, o.zip].filter(Boolean).join(" "))], ["County", o.county ?? ""], ["Mailing address", o.mailing ?? ""],
+    ["Phone", line(o.phone, o.cell ? `cell ${o.cell}` : "")], ["Email", o.email ?? ""],
+    ["Premises ID (PIN)", o.premisesId ?? ""], ["Scrapie flock ID", o.flockId ?? ""], ["Scrapie program status", o.sfcp ?? ""], ["Herd health", o.herdHealth ?? ""],
+    ["ADGA herd name", o.adgaHerd ?? ""], ["Herd tattoo", o.herdTattoo ?? ""], ["ADGA member #", o.adgaMember ?? ""],
     ["", ""], ["CONSIGNEE / DESTINATION", ""], ["Destination", t.destName], ["Address", t.destAddress ?? ""], ["City, State ZIP", line(t.destCity, [t.destState, t.destZip].filter(Boolean).join(" "))], ["Phone", t.destPhone ?? ""], ["Consignee (person)", t.consignee ?? ""],
-    ["", ""], ["Carrier", t.carrier ?? ""], ["Notes", t.notes ?? ""],
+    ["", ""], ["Carrier", t.carrier ?? ""], ["Vehicle / trailer", o.vehicle ?? ""], ["Notes", t.notes ?? ""],
+    ...(vet ? ([["", ""], ["VETERINARIAN", ""], ["Vet", vetLabel(vet)], ["Phone", vet.phone ?? ""], ["Email", vet.email ?? ""], ["Address", vetAddress(vet)], ["Accreditation #", vet.accreditation ?? ""]] as [string, string][]) : []),
   ];
   info.forEach((r) => s.addRow(r));
   s.getColumn(1).width = 24; s.getColumn(2).width = 60;
   s.getRow(1).font = { bold: true, size: 13 };
-  [9, 19].forEach((n) => (s.getRow(n).font = { bold: true }));
+  s.eachRow((r: any) => { if (/^[A-Z /]+$/.test(String(r.getCell(1).value ?? "")) && String(r.getCell(1).value).length > 3) r.font = { bold: true }; });
   const a = wb.addWorksheet("Animals", { views: [{ state: "frozen", ySplit: 1 }], pageSetup: { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
   a.columns = COLUMNS.map((c) => ({ header: c.label, key: c.key, width: c.w }));
   list.forEach((r) => a.addRow(r));
@@ -95,7 +110,7 @@ export async function workbook(t: Trip, o: Origin, list: CviRow[]): Promise<File
 
 const esc = (x: any) => String(x ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" } as any)[c]);
 /** Printable page (landscape) */
-export function printHtml(t: Trip, o: Origin, list: CviRow[]) {
+export function printHtml(t: Trip, o: Origin, list: CviRow[], vet?: Vet | null) {
   const cols = COLUMNS.filter((c) => !["species", "chipLoc"].includes(c.key));
   return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(fileBase(t))}</title><style>
   @page{size:landscape;margin:10mm}body{font:11px/1.35 -apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#111;margin:0}
@@ -104,8 +119,8 @@ export function printHtml(t: Trip, o: Origin, list: CviRow[]) {
   th{background:#eee;font-size:10px}td{font-size:10.5px}tr{page-break-inside:avoid}</style></head><body>
   <h1>Travel list for CVI — ${esc(list.length)} goat${list.length === 1 ? "" : "s"}</h1>
   <div class="g">
-   <div class="b"><h2>Shipment</h2>Ship date: <b>${esc(fmtDate(t.shipDate))}</b>${t.returnDate ? `<br>Return: ${esc(fmtDate(t.returnDate))}` : ""}<br>Purpose: <b>${esc(t.purpose)}</b>${t.carrier ? `<br>Carrier: ${esc(t.carrier)}` : ""}</div>
-   <div class="b"><h2>Consignor / origin</h2>${esc(o.owner)}${o.farm ? `<br>${esc(o.farm)}` : ""}<br>${esc(o.address)}<br>${esc(line(o.city, [o.state, o.zip].filter(Boolean).join(" ")))}${o.phone ? `<br>${esc(o.phone)}` : ""}${o.premisesId ? `<br>Premises ID: ${esc(o.premisesId)}` : ""}${o.flockId ? `<br>Scrapie flock ID: ${esc(o.flockId)}` : ""}</div>
+   <div class="b"><h2>Shipment</h2>Ship date: <b>${esc(fmtDate(t.shipDate))}</b>${t.returnDate ? `<br>Return: ${esc(fmtDate(t.returnDate))}` : ""}<br>Purpose: <b>${esc(t.purpose)}</b>${t.carrier ? `<br>Carrier: ${esc(t.carrier)}` : ""}${o.vehicle ? `<br>Vehicle: ${esc(o.vehicle)}` : ""}${vet ? `<br><br>Vet: ${esc(vetLabel(vet))}${vet.phone ? `<br>${esc(vet.phone)}` : ""}` : ""}</div>
+   <div class="b"><h2>Consignor / origin</h2>${esc(o.owner)}${o.farm ? `<br>${esc(o.farm)}` : ""}<br>${esc(o.address)}<br>${esc(line(o.city, [o.state, o.zip].filter(Boolean).join(" ")))}${o.phone ? `<br>${esc(o.phone)}` : ""}${o.county ? `<br>${esc(o.county)} County` : ""}${o.premisesId ? `<br>Premises ID: ${esc(o.premisesId)}` : ""}${o.flockId ? `<br>Scrapie flock ID: ${esc(o.flockId)}` : ""}${o.sfcp ? `<br>Scrapie program: ${esc(o.sfcp)}` : ""}${o.herdHealth ? `<br>Herd health: ${esc(o.herdHealth)}` : ""}${o.herdTattoo ? `<br>Herd tattoo: ${esc(o.herdTattoo)}` : ""}</div>
    <div class="b"><h2>Consignee / destination</h2><b>${esc(t.destName)}</b>${t.consignee ? `<br>${esc(t.consignee)}` : ""}<br>${esc(t.destAddress)}<br>${esc(line(t.destCity, [t.destState, t.destZip].filter(Boolean).join(" ")))}${t.destPhone ? `<br>${esc(t.destPhone)}` : ""}</div>
   </div>
   <table><thead><tr>${cols.map((c) => `<th>${esc(c.label)}</th>`).join("")}</tr></thead><tbody>

@@ -18,7 +18,8 @@ async function build() {
   alter table herd.tasks add column if not exists repeat_unit text default 'days', add column if not exists reeval boolean default false;
   alter table herd.medications add column if not exists repeat_ongoing boolean default false;`);
   // Travel lists for CVIs
-  await pg.unsafe(`create table if not exists herd.trips (id serial primary key, ship_date text not null, return_date text, purpose text not null, dest_name text not null, dest_address text, dest_city text, dest_state text, dest_zip text, dest_phone text, consignee text, carrier text, animal_ids text, notes text);`);
+  await pg.unsafe(`create table if not exists herd.trips (id serial primary key, ship_date text not null, return_date text, purpose text not null, dest_name text not null, dest_address text, dest_city text, dest_state text, dest_zip text, dest_phone text, consignee text, carrier text, animal_ids text, notes text, vet_id text);
+  alter table herd.trips add column if not exists vet_id text;`);
   // Filing cabinets: Reference and Sale documents (files kept in pieces), and 7-day share links
   await pg.unsafe(`create table if not exists herd.documents (
     id serial primary key, cabinet text not null, title text not null, folder text, animal_id integer, doc_date text, notes text,

@@ -19,6 +19,7 @@ import LogPage from "@/pages/log";
 import { ReferenceDocs, SaleDocs } from "@/pages/documents";
 import SharedDoc from "@/pages/shared-doc";
 import TravelPage from "@/pages/travel";
+import FarmPage from "@/pages/farm";
 import Pastures from "@/pages/pastures";
 import Phones from "@/pages/phones";
 import Reports from "@/pages/reports";
@@ -45,6 +46,7 @@ function AppRouter() {
         <Route path="/reports" component={Reports} />
         <Route path="/data" component={DataPage} />
         <Route path="/log" component={LogPage} />
+        <Route path="/farm" component={FarmPage} />
         <Route path="/travel" component={TravelPage} />
         <Route path="/travel/:id" component={TravelPage} />
         <Route path="/reference" component={ReferenceDocs} />

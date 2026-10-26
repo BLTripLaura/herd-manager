@@ -14,46 +14,21 @@ import { Field, Pick } from "@/components/forms";
 import { ConfirmDelete } from "@/components/confirm-delete";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useList, today, fmtDate, goatName, type Animal, type Trip } from "@/lib/herd";
-import { ORIGIN_KEY, PURPOSES, idsOf, rows, problems, workbook, printHtml, destText, originText, ageAt, type Origin } from "@/lib/cvi";
+import { useOrigin, useVets } from "@/pages/farm";
+import { PURPOSES, idsOf, rows, problems, workbook, printHtml, destText, originText, ageAt, vetLabel, type Origin, type Vet } from "@/lib/cvi";
 import { canShareFile } from "@/lib/docs";
 
-const useOrigin = () => useQuery<{ value: Origin | null }>({ queryKey: ORIGIN_KEY });
 const blankTrip = (): any => ({ shipDate: today(), purpose: "Exhibition / show", destName: "", animalIds: "" });
-
-function OriginDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
-  const { data } = useOrigin(); const { toast } = useToast();
-  const [v, setV] = useState<Origin>({});
-  useEffect(() => { if (open) setV(data?.value ?? {}); }, [open]); // eslint-disable-line
-  const f = (k: keyof Origin, label: string, cls = "", ph = "") => <Field label={label} className={cls}><Input value={v[k] ?? ""} placeholder={ph} onChange={(e) => setV((p) => ({ ...p, [k]: e.target.value }))} data-testid={`input-origin-${k}`} /></Field>;
-  const save = async () => { await apiRequest("PUT", "/api/settings/cviOrigin", { value: v }); queryClient.invalidateQueries({ queryKey: ORIGIN_KEY }); toast({ title: "Farm details saved" }); onOpenChange(false); };
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md">
-        <DialogHeader><DialogTitle>Your farm on the CVI</DialogTitle><DialogDescription>The consignor and origin. Entered once and put on every travel list.</DialogDescription></DialogHeader>
-        <div className="grid grid-cols-2 gap-3">
-          {f("owner", "Owner name", "col-span-2")}{f("farm", "Farm name", "col-span-2")}{f("address", "Street address", "col-span-2")}
-          {f("city", "City")}<div className="grid grid-cols-2 gap-2">{f("state", "State", "", "DE")}{f("zip", "ZIP")}</div>
-          {f("phone", "Phone")}{f("email", "Email")}
-          {f("premisesId", "Premises ID (PIN)", "", "Optional")}{f("flockId", "Scrapie flock ID", "", "Optional")}
-          {f("vetName", "Vet / clinic", "", "Optional")}{f("vetEmail", "Vet email", "", "For sending the list")}
-        </div>
-        <DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button onClick={save} data-testid="button-save-origin">Save</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 function TripList() {
   const { data: trips, isLoading } = useList("trips");
-  const { data: animals = [] } = useList("animals");
   const [, go] = useLocation();
-  const [farm, setFarm] = useState(false);
   const list = [...(trips ?? [])].sort((a, b) => (a.shipDate < b.shipDate ? 1 : -1));
   const t = today();
   return (
     <>
       <PageHeader title="Travel lists (CVI)" sub="Pick the goats going to a show or sale, then send the list to your vet for the GlobalVetLink health certificate.">
-        <Button variant="outline" onClick={() => setFarm(true)} data-testid="button-farm-details"><Settings2 />Farm details</Button>
+        <Button variant="outline" onClick={() => go("/farm")} data-testid="button-farm-details"><Settings2 />Farm information</Button>
         <Button onClick={() => go("/travel/new")} data-testid="button-new-trip"><Plus />New travel list</Button>
       </PageHeader>
       {isLoading ? <Skeleton className="h-24" /> : !list.length ? <Empty icon={Truck} title="No travel lists yet">Start one with New travel list.</Empty> : (
@@ -70,8 +45,6 @@ function TripList() {
           ); })}
         </ul>
       )}
-      {animals.length === 0 ? null : null}
-      <OriginDialog open={farm} onOpenChange={setFarm} />
     </>
   );
 }
@@ -90,9 +63,12 @@ function TripEditor({ id }: { id: number | null }) {
   const [showAll, setShowAll] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [del, setDel] = useState(false);
-  const [farm, setFarm] = useState(false);
+  const { data: vetsData } = useVets();
+  const vets: Vet[] = vetsData?.value ?? [];
   const [busy, setBusy] = useState(false);
   useEffect(() => { if (saved) { setV({ ...saved }); setDirty(false); } }, [saved?.id]); // eslint-disable-line
+  // New list: carrier and vet come from the Farm information page
+  useEffect(() => { if (!id) setV((p: any) => ({ ...p, carrier: p.carrier || origin?.value?.carrier || "", vetId: p.vetId || (vets.find((x) => x.primary) ?? vets[0])?.id || null })); }, [id, origin?.value?.carrier, vets.length]); // eslint-disable-line
   const set = (k: string) => (x: any) => { setV((p: any) => ({ ...p, [k]: x })); setDirty(true); };
   const ids = idsOf(v);
   const byId = useMemo(() => new Map(animals.map((a) => [a.id, a])), [animals]);
@@ -105,6 +81,7 @@ function TripEditor({ id }: { id: number | null }) {
   const add = (a: Animal) => { set("animalIds")([...ids, a.id].join(",")); setQ(""); };
   const remove = (aid: number) => set("animalIds")(ids.filter((x) => x !== aid).join(","));
   const o: Origin = origin?.value ?? {};
+  const vet: Vet | null = vets.find((x) => x.id === v.vetId) ?? (vets.find((x) => x.primary) ?? vets[0] ?? null);
   const need = !v.shipDate ? "the date" : !String(v.destName ?? "").trim() ? "the destination" : !v.purpose ? "the purpose" : "";
   const save = async (quiet = false) => {
     if (need) { toast({ title: `Enter ${need}`, variant: "destructive" }); return null; }
@@ -122,18 +99,18 @@ function TripEditor({ id }: { id: number | null }) {
     if (!o.owner && !o.farm) toast({ title: "Tip: add your farm details", description: "Your name and address go on the CVI as the consignor." });
     return { t: { ...t, ...v, id: t.id } as Trip, list: rows(v, animals, treatments, breedings) };
   };
-  const excel = async () => { setBusy(true); try { const r = await ready(); if (!r) return; const f = await workbook(r.t, o, r.list); const u = URL.createObjectURL(f); const a = document.createElement("a"); a.href = u; a.download = f.name; a.click(); setTimeout(() => URL.revokeObjectURL(u), 30000); } finally { setBusy(false); } };
-  const print = async () => { const w = window.open("", "_blank"); const r = await ready(); if (!r) { w?.close(); return; } if (!w) return toast({ title: "Allow pop-ups to print", variant: "destructive" }); w.document.write(printHtml(r.t, o, r.list)); w.document.close(); };
+  const excel = async () => { setBusy(true); try { const r = await ready(); if (!r) return; const f = await workbook(r.t, o, r.list, vet); const u = URL.createObjectURL(f); const a = document.createElement("a"); a.href = u; a.download = f.name; a.click(); setTimeout(() => URL.revokeObjectURL(u), 30000); } finally { setBusy(false); } };
+  const print = async () => { const w = window.open("", "_blank"); const r = await ready(); if (!r) { w?.close(); return; } if (!w) return toast({ title: "Allow pop-ups to print", variant: "destructive" }); w.document.write(printHtml(r.t, o, r.list, vet)); w.document.close(); };
   const send = async () => {
     setBusy(true);
     try {
       const r = await ready(); if (!r) return;
-      const f = await workbook(r.t, o, r.list);
+      const f = await workbook(r.t, o, r.list, vet);
       const subject = `CVI request: ${r.list.length} goat${r.list.length === 1 ? "" : "s"} to ${r.t.destName} on ${fmtDate(r.t.shipDate)}`;
-      const body = `Hello${o.vetName ? ` ${o.vetName}` : ""},\n\nPlease prepare a CVI for ${r.list.length} goat${r.list.length === 1 ? "" : "s"}.\nShip date: ${fmtDate(r.t.shipDate)}\nPurpose: ${r.t.purpose}\nDestination: ${destText(r.t)}\nOrigin: ${originText(o)}\n\nThe goat list (IDs, tattoos, microchips, breed, sex, age, color) is attached.\n\nThank you,\n${o.owner ?? ""}`;
+      const body = `Hello${vet ? ` ${vet.name}` : o.vetName ? ` ${o.vetName}` : ""},\n\nPlease prepare a CVI for ${r.list.length} goat${r.list.length === 1 ? "" : "s"}.\nShip date: ${fmtDate(r.t.shipDate)}\nPurpose: ${r.t.purpose}\nDestination: ${destText(r.t)}\nOrigin: ${originText(o)}\n\nThe goat list (IDs, tattoos, microchips, breed, sex, age, color) is attached.\n\nThank you,\n${o.owner ?? ""}`;
       if (canShareFile(f)) { try { await navigator.share({ files: [f], title: subject, text: body }); return; } catch (e: any) { if (e?.name === "AbortError") return; } }
       const u = URL.createObjectURL(f); const a = document.createElement("a"); a.href = u; a.download = f.name; a.click();
-      window.location.href = `mailto:${encodeURIComponent(o.vetEmail ?? "")}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body + "\n\n(Attach the downloaded file: " + f.name + ")")}`;
+      window.location.href = `mailto:${encodeURIComponent(vet?.email ?? o.vetEmail ?? "")}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body + "\n\n(Attach the downloaded file: " + f.name + ")")}`;
       toast({ title: "List downloaded", description: "Attach it to the email that just opened." });
     } finally { setBusy(false); }
   };
@@ -163,11 +140,15 @@ function TripEditor({ id }: { id: number | null }) {
             <Field label="Contact at destination"><Input value={v.consignee ?? ""} onChange={(e) => set("consignee")(e.target.value)} placeholder="Optional" data-testid="input-trip-consignee" /></Field>
             <Field label="Phone"><Input value={v.destPhone ?? ""} onChange={(e) => set("destPhone")(e.target.value)} placeholder="Optional" data-testid="input-trip-phone" /></Field>
             <Field label="Carrier" className="col-span-2"><Input value={v.carrier ?? ""} onChange={(e) => set("carrier")(e.target.value)} placeholder="e.g., Owner's truck and trailer" data-testid="input-trip-carrier" /></Field>
+            <Field label="Vet for this CVI" className="col-span-2" hint={vets.length ? (vet?.email ? `Send to vet emails ${vet.email}` : "This vet has no email yet") : undefined}>
+              {vets.length ? <Pick value={vet?.id ?? ""} onChange={set("vetId")} options={vets.map((x) => ({ value: x.id, label: vetLabel(x) }))} testId="select-trip-vet" />
+                : <button type="button" className="text-sm text-primary underline" onClick={() => go("/farm")} data-testid="link-add-vet">Add your vets on the Farm information page</button>}
+            </Field>
             <Field label="Notes" className="col-span-2"><Textarea rows={2} value={v.notes ?? ""} onChange={(e) => set("notes")(e.target.value)} placeholder="Optional · entry permit number, show rules" data-testid="input-trip-notes" /></Field>
           </div>
           <div className="mt-3 rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
-            <div className="mb-1 flex items-center justify-between"><span className="font-semibold text-foreground">From (consignor)</span><button type="button" className="text-primary underline" onClick={() => setFarm(true)} data-testid="button-edit-origin">Edit</button></div>
-            {originText(o) || "Add your name, farm address and phone so they go on the list."}
+            <div className="mb-1 flex items-center justify-between"><span className="font-semibold text-foreground">From (consignor)</span><button type="button" className="text-primary underline" onClick={() => go("/farm")} data-testid="button-edit-origin">Edit</button></div>
+            {originText(o) || "Add your name, farm address and phone on the Farm information page."}
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             <Button onClick={() => save()} disabled={!dirty && !!id} data-testid="button-save-trip">{id ? (dirty ? "Save changes" : "Saved") : "Save travel list"}</Button>
@@ -216,7 +197,6 @@ function TripEditor({ id }: { id: number | null }) {
           {chosen.length > 0 && <p className="mt-3 text-xs text-muted-foreground">Registry tattoos count as official ID only when the registration papers travel with the goat.</p>}
         </section>
       </div>
-      <OriginDialog open={farm} onOpenChange={setFarm} />
       <ConfirmDelete open={del} onOpenChange={setDel} testId="button-confirm-delete-trip" title="Delete this travel list?" body="The goats are not changed. This can't be undone and is noted in the system log."
         onConfirm={async () => { await apiRequest("DELETE", `/api/trips/${id}`); queryClient.invalidateQueries({ queryKey: ["/api/trips"] }); toast({ title: "Travel list deleted" }); go("/travel"); }} />
     </>

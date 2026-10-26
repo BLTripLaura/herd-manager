@@ -274,6 +274,7 @@ export const trips = sqliteTable("trips", {
   consignee: text("consignee"), // person receiving / show secretary, if different
   carrier: text("carrier"),
   animalIds: text("animal_ids"), // comma list in the order added
+  vetId: text("vet_id"), // vet from the Farm information page
   notes: text("notes"),
 });
 export const insertTripSchema = createInsertSchema(trips).omit({ id: true });
