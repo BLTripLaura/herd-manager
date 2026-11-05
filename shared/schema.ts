@@ -45,6 +45,8 @@ export const animals = sqliteTable("animals", {
   notes: text("notes"),
   cdtFromBirth: boolean("cdt_from_birth").default(false), // newborn entered in the app: kid CD&T series counts from the birth date
   calfPro: integer("calf_pro"), // kid Calf-Pro program: null = automatic (born on/after the program start), 1 = on, 0 = off
+  ekId: integer("ek_id"), // EasyKeeper animal id (brought over by the EasyKeeper import; keeps a second import from doubling)
+  outsideProgeny: text("outside_progeny"), // JSON [{name, reg, sex, dob}]: kids EasyKeeper lists that were never in this herd
 });
 
 export const photos = sqliteTable("animal_photos", {

@@ -159,7 +159,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   if (isLoading || farm.isLoading) return <div className="flex min-h-dvh items-center justify-center"><Logo className="h-16 w-16 animate-pulse" /></div>;
   if (farm.error) return <Card><p className="text-sm text-destructive" data-testid="text-setup-error">{(farm.error as Error).message}</p><Button className="mt-4 w-full" onClick={() => farm.refetch()}>Try again</Button></Card>;
   if (farm.data?.missing?.length) return <Card><MissingSettings missing={farm.data.missing} /></Card>;
-  if (farm.data?.setupNeeded && !data) return <Card><FirstSetup onDone={() => { queryClient.clear(); refetch(); }} /></Card>;
+  if (farm.data?.setupNeeded && !data) return <Card><FirstSetup onDone={() => { window.location.hash = "#/start"; queryClient.clear(); refetch(); }} /></Card>;
   if (!data) return <SignIn onDone={() => { queryClient.clear(); refetch(); }} />;
   if (data.mustChange) return <Card><PasswordForm first onDone={() => refetch()} /></Card>;
   return <MeCtx.Provider value={data}>{children}</MeCtx.Provider>;

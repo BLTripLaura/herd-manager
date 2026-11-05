@@ -7,3 +7,6 @@ Each farm runs its **own copy**, with its own free Supabase database and Vercel 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FBLTripLaura%2Fherd-manager&project-name=my-herd&repository-name=my-herd&env=DATABASE_URL%2CSUPABASE_URL%2CSUPABASE_PUBLISHABLE_KEY&envDescription=Three+values+from+your+free+Supabase+project.+The+setup+guide+shows+where+to+find+each+one.&envLink=https%3A%2F%2Fgithub.com%2FBLTripLaura%2Fherd-manager%2Fblob%2Fmain%2FSETUP.md)
 
 **Start here:** [SETUP.md](SETUP.md) walks you through it step by step (about 20 minutes).
+
+
+**Coming from EasyKeeper?** The app's **Getting started** page copies your whole herd over — every goat with its treatment history, progeny, ADGA links, breeding, notes, reminders and photos. See [SETUP.md](SETUP.md#step-4-bring-your-herd-over-from-easykeeper-optional).

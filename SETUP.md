@@ -4,7 +4,7 @@ This gives you your own private goat herd app. Your records live in your own fre
 
 Your copy comes with:
 - **A stocked Medicine Cabinet:** 44 common goat medicines with doses, routes, repeat schedules and withdrawal notes. Stock starts at zero, and every medicine is marked "not yet confirmed with vet".
-- **Everything else empty:** add your goats by hand, or import a spreadsheet or an EasyKeeper export.
+- **Everything else empty:** bring your whole herd over from EasyKeeper (every goat with its complete records), import a spreadsheet, or add goats by hand.
 - **Your own logins:** you'll be the owner, and you can add helpers or a shared barn tablet login.
 
 The setup takes about 20 minutes and costs nothing on the free plans.
@@ -40,6 +40,18 @@ You don't need to build any tables. The app does that itself the first time it o
 1. Open your app's address. You'll see **Set up your herd app**.
 2. Enter your farm name, your name, your email and a password, then tap **Set up my herd**.
 3. **Do this right after deploying.** The first person to open a new copy becomes its owner.
+4. The app opens on **Getting started**. Follow it to bring your goats in.
+
+## Step 4: Bring your herd over from EasyKeeper (optional)
+EasyKeeper has no export button, so Herd Manager gives you a small reader that runs in your own signed-in EasyKeeper tab. It only reads; nothing in EasyKeeper changes. The **Getting started** page in the app has the same steps with the buttons you need.
+
+1. On a computer, open your Herd Manager and go to **Getting started** (in the menu).
+2. Show your bookmarks bar (Ctrl+Shift+B, or ⌘+Shift+B on a Mac) and drag the **EasyKeeper → Herd Manager** button onto it.
+3. Open [app.easykeeper.com](https://app.easykeeper.com), sign in, and click that bookmark. Click **Start reading**. Plan on 10–15 seconds per goat; keep the tab open. If it stops, sign in again and click the bookmark to continue where it left off.
+4. When it finishes it saves **easykeeper-herd-(date).json** to your Downloads. Keep that file private.
+5. Back on **Getting started**, choose the file and click **Bring everything into Herd Manager**. Keep the page open until it finishes, then download the import report.
+
+What comes over: every goat ever in your EasyKeeper herd (active, sold, deceased) with its profile, registration numbers, ADGA pedigree link, sire, dam and grandparents, progeny, complete treatment history (medication, parasite control, vaccinations, supplements), care records, weights, open reminders, breeding and kidding, notes, status history with buyer and cause of death, photos, lactations and harvest notes. Treatment history does not take anything out of your Medicine Cabinet stock. Importing the file again never doubles anything.
 
 ## After setup
 - **Add helpers:** open the menu, then **Import & export**, then **Who can sign in**. Use an email for a person, or just a username (like `barn`) for a shared tablet. You'll get a temporary password to give them.

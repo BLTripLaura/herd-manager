@@ -85,6 +85,9 @@ export default function AnimalPage() {
   const todos = tasks.filter((k) => !k.done && k.kind === "task" && String(k.animalIds || k.animalId || "").split(",").map(Number).includes(id)).sort((x, y) => x.dueDate.localeCompare(y.dueDate));
   const offspring = progenyOf(a, animals!).sort((x, y) => (y.dob ?? "").localeCompare(x.dob ?? "") || x.name.localeCompare(y.name));
   const inHerd = offspring.filter((k) => k.status === "active").length;
+  // Kids EasyKeeper listed that never came into this herd (kept from the EasyKeeper import)
+  const outsideKids: { name: string; reg?: string | null; sex?: string | null; dob?: string | null }[] = (() => { try { const v = JSON.parse((a as any).outsideProgeny || "[]"); return Array.isArray(v) ? v : []; } catch { return []; } })();
+  const kidCount = offspring.length + outsideKids.length;
   const byYear = offspring.reduce<[string, Animal[]][]>((acc, k) => {
     const yr = k.dob ? k.dob.slice(0, 4) : "Birth date unknown";
     const g = acc.find(([y]) => y === yr); g ? g[1].push(k) : acc.push([yr, [k]]); return acc;
@@ -187,10 +190,10 @@ export default function AnimalPage() {
             </button>
           </div>}
           {a.sex === "doe" && <Info label="Last milk test" value={lastTest ? `${lastTest.lbs.toFixed(1)} lb · ${fmtShort(lastTest.date)}` : null} />}
-          <Info label="Progeny" value={offspring.length
+          <Info label="Progeny" value={kidCount
             ? <span className="flex flex-wrap gap-x-2 gap-y-0.5">
                 {offspring.slice(0, 4).map((k) => <Link key={k.id} href={`/animal/${k.id}`} className="text-primary hover:underline" data-testid={`link-kid-${k.id}`}>{goatName(k)}</Link>)}
-                <button onClick={showProgeny} className="text-xs font-normal text-muted-foreground hover:text-primary hover:underline" data-testid="button-view-progeny">{offspring.length > 4 ? `+${offspring.length - 4} more · ` : ""}{inHerd} of {offspring.length} in herd</button>
+                <button onClick={showProgeny} className="text-xs font-normal text-muted-foreground hover:text-primary hover:underline" data-testid="button-view-progeny">{kidCount > 4 ? `+${kidCount - Math.min(4, offspring.length)} more · ` : ""}{inHerd} of {kidCount} in herd</button>
               </span>
             : null} />
         </div>
@@ -207,7 +210,7 @@ export default function AnimalPage() {
           {a.sex === "doe" && <TabsTrigger value="breeding" data-testid="tab-breeding">Breeding</TabsTrigger>}
           {a.sex === "doe" && <TabsTrigger value="milk" data-testid="tab-milk">Milk</TabsTrigger>}
           <TabsTrigger value="care" data-testid="tab-care">Care</TabsTrigger>
-          <TabsTrigger value="kids" data-testid="tab-progeny">Progeny{offspring.length ? ` (${offspring.length})` : ""}</TabsTrigger>
+          <TabsTrigger value="kids" data-testid="tab-progeny">Progeny{kidCount ? ` (${kidCount})` : ""}</TabsTrigger>
           <TabsTrigger value="shows" data-testid="tab-shows">Shows{(() => { const n = allShows.filter((x) => x.animalId === id).length; return n ? ` (${n})` : ""; })()}</TabsTrigger>
           <TabsTrigger value="other" data-testid="tab-other">Other{(() => { const n = allNotes.filter((x) => x.animalId === id).length; return n ? ` (${n})` : ""; })()}</TabsTrigger>
         </TabsList>
@@ -415,12 +418,12 @@ export default function AnimalPage() {
         <TabsContent value="care"><CareTab animal={a} /></TabsContent>
 
         <TabsContent value="kids">
-          {offspring.length === 0 ? (
+          {kidCount === 0 ? (
             <Empty icon={Users} title="No progeny on file">Kids appear here automatically when their sire or dam is set to {goatName(a)}.</Empty>
           ) : (
             <div className="space-y-4">
               <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                {(["doe", "buck", "wether"] as const).map((sx) => { const n = offspring.filter((k) => k.sex === sx).length; return n ? <Badge key={sx} variant="secondary" className="capitalize">{n} {sx}{n > 1 ? "s" : ""}</Badge> : null; })}
+                {(["doe", "buck", "wether"] as const).map((sx) => { const n = offspring.filter((k) => k.sex === sx).length + outsideKids.filter((k) => (k.sex ?? "").toLowerCase() === sx).length; return n ? <Badge key={sx} variant="secondary" className="capitalize">{n} {sx}{n > 1 ? "s" : ""}</Badge> : null; })}
                 <Badge variant="outline">{inHerd} still in herd</Badge>
               </div>
               {byYear.map(([yr, kids]) => (
@@ -451,6 +454,19 @@ export default function AnimalPage() {
                   </ul>
                 </div>
               ))}
+              {outsideKids.length > 0 && (
+                <div data-testid="list-outside-progeny">
+                  <div className="mb-1.5 text-xs font-semibold text-muted-foreground">Other progeny recorded in EasyKeeper ({outsideKids.length})</div>
+                  <ul className="overflow-hidden rounded-lg border bg-card">
+                    {[...outsideKids].sort((x, y) => (y.dob ?? "").localeCompare(x.dob ?? "")).map((k, i) => (
+                      <li key={i} className="border-b px-4 py-2.5 last:border-b-0" data-testid={`row-outside-progeny-${i}`}>
+                        <div className="truncate text-sm font-semibold">{k.name}{k.reg && <span className="ml-1.5 font-normal text-muted-foreground">{k.reg}</span>}</div>
+                        <div className="truncate text-xs text-muted-foreground"><span className="capitalize">{(k.sex ?? "").toLowerCase() || "Sex not given"}</span>{k.dob ? ` · ${fmtShort(k.dob)}` : ""} · not in this herd</div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <p className="text-xs text-muted-foreground">Tap any kid to open their profile. Sold and deceased kids stay listed for your records.</p>
             </div>
           )}

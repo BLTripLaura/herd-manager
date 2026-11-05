@@ -16,7 +16,8 @@ async function build() {
     add column if not exists dose_per_lbs double precision, add column if not exists first_dose_amount double precision, add column if not exists pill_form text default 'tablet';
   alter table herd.treatments add column if not exists dose_mg double precision, add column if not exists dose_detail text;
   alter table herd.tasks add column if not exists repeat_unit text default 'days', add column if not exists reeval boolean default false;
-  alter table herd.medications add column if not exists repeat_ongoing boolean default false;`);
+  alter table herd.medications add column if not exists repeat_ongoing boolean default false;
+  alter table herd.animals add column if not exists ek_id integer, add column if not exists outside_progeny text;`);
   // Travel lists for CVIs
   await pg.unsafe(`create table if not exists herd.trips (id serial primary key, ship_date text not null, return_date text, purpose text not null, dest_name text not null, dest_address text, dest_city text, dest_state text, dest_zip text, dest_phone text, consignee text, carrier text, animal_ids text, notes text, vet_id text);
   alter table herd.trips add column if not exists vet_id text;`);

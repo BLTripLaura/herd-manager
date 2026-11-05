@@ -230,6 +230,15 @@ export default function Today() {
         <Button variant="ghost" size="sm" onClick={() => setCustomizing(true)} data-testid="button-customize-today"><SlidersHorizontal />Customize</Button>
       </PageHeader>
       <CustomizeTodayDialog open={customizing} onOpenChange={setCustomizing} />
+      {(animals.data ?? []).length === 0 && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/40 bg-primary/5 p-4" data-testid="banner-getting-started">
+          <div className="min-w-0 flex-1 basis-64">
+            <h2 className="text-sm font-bold">Welcome — let's bring your goats in</h2>
+            <p className="text-sm text-muted-foreground">Follow Getting started to copy your whole herd from EasyKeeper (every record), import a spreadsheet, or add goats from their papers.</p>
+          </div>
+          <Button asChild size="sm"><Link href="/start" data-testid="link-getting-started">Getting started</Link></Button>
+        </div>
+      )}
 
       {(() => {
         const blocks: Record<SectionId, React.ReactNode> = {

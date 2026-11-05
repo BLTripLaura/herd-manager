@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Download } from "lucide-react";
+import { Download, Rocket } from "lucide-react";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ImportAnimals } from "@/components/import-animals";
 import { ScanPapersButton } from "@/components/papers";
@@ -27,6 +28,13 @@ export default function DataPage() {
             <p className="text-sm text-muted-foreground">Take a photo of the certificate. The details and pedigree are read for you to check before saving, and the photo is kept on the profile.</p>
           </div>
           <ScanPapersButton />
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4" data-testid="card-easykeeper-link">
+          <div className="min-w-0 flex-1 basis-64">
+            <h2 className="text-sm font-bold">Coming from EasyKeeper?</h2>
+            <p className="text-sm text-muted-foreground">Bring over every goat with its complete records — treatment history, progeny, ADGA links, breeding, notes, reminders and photos.</p>
+          </div>
+          <Button asChild variant="outline"><Link href="/start" data-testid="link-easykeeper-start"><Rocket />EasyKeeper import</Link></Button>
         </div>
         <FarmNameCard />
         <LoginsCard />

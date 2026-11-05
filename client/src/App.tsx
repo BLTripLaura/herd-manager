@@ -24,6 +24,7 @@ import Pastures from "@/pages/pastures";
 import Phones from "@/pages/phones";
 import Reports from "@/pages/reports";
 import TankPage from "@/pages/tank";
+import StartPage from "@/pages/start";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { AuthGate } from "@/components/auth";
 
@@ -45,6 +46,7 @@ function AppRouter() {
         <Route path="/milk" component={MilkPage} />
         <Route path="/reports" component={Reports} />
         <Route path="/data" component={DataPage} />
+        <Route path="/start" component={StartPage} />
         <Route path="/log" component={LogPage} />
         <Route path="/farm" component={FarmPage} />
         <Route path="/travel" component={TravelPage} />
