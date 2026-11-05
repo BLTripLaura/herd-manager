@@ -1,3 +1,4 @@
+import { Copyright } from "@/components/copyright";
 import { DemoBanner } from "@/components/herd-switcher";
 import { UpdateBanner } from "@/components/update-banner";
 import { useFarmName, appTitle } from "@/lib/farm";
@@ -147,6 +148,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <div className="mx-auto max-w-6xl px-4 py-2 md:px-8 md:py-3"><QuickSearch /></div>
         </div>
         <div className="mx-auto max-w-6xl px-4 py-5 md:px-8 md:py-6">{children}</div>
+        <footer className="mx-auto max-w-6xl px-4 pb-4 md:px-8"><Copyright className="border-t pt-4" /></footer>
       </main>
 
       {/* Mobile bottom nav */}

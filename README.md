@@ -1,5 +1,7 @@
 # Herd Manager
 
+> © 2026 Laura Ritter. This app was developed by Laura Ritter All Rights Reserved. Distribution or copying of any or all of the product is strictly prohibited.
+
 A private herd app for dairy goat farms. It covers goats, treatments with milk and meat holds, breeding and kidding, milk tests, pastures, reminders, phone numbers and reports. It works on phones, tablets and computers.
 
 Each farm runs its **own copy**, with its own free Supabase database and Vercel site, so your records stay yours.

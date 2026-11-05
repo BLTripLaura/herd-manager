@@ -1,3 +1,4 @@
+import { Copyright } from "@/components/copyright";
 import { createContext, useContext, useState, type FormEvent, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { KeyRound, LogOut, Trash2, UserPlus, Users } from "lucide-react";
@@ -44,6 +45,7 @@ function Card({ children }: { children: ReactNode }) {
           <div className="text-base font-bold">{appTitle(farm)}</div>
         </div>
         {children}
+        <Copyright className="mt-6" />
       </div>
     </div>
   );
