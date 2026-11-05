@@ -40,7 +40,7 @@ function countOf(f: EKFile) {
   let health = 0, reminders = 0, breed = 0, notes = 0, photos = 0, progeny = 0;
   const status: Record<string, number> = {};
   for (const a of f.animals) {
-    const st = String(a.list?.status || "Unknown"); status[st] = (status[st] ?? 0) + 1;
+    const st = String(a.list?.status || a.status?.[0]?.rows?.[0]?.cells?.[1]?.[0] || "Unknown"); status[st] = (status[st] ?? 0) + 1;
     for (const t of a.health ?? []) (/scheduled/i.test(t.heading) || t.headers?.some((h: string) => /due/i.test(h)) ? (reminders += t.rows.length) : (health += t.rows.length));
     for (const t of a.breedings ?? []) breed += t.rows.length;
     for (const t of a.notes ?? []) notes += t.rows.length;

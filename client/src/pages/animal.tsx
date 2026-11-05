@@ -461,13 +461,13 @@ export default function AnimalPage() {
                     {[...outsideKids].sort((x, y) => (y.dob ?? "").localeCompare(x.dob ?? "")).map((k, i) => (
                       <li key={i} className="border-b px-4 py-2.5 last:border-b-0" data-testid={`row-outside-progeny-${i}`}>
                         <div className="truncate text-sm font-semibold">{k.name}{k.reg && <span className="ml-1.5 font-normal text-muted-foreground">{k.reg}</span>}</div>
-                        <div className="truncate text-xs text-muted-foreground"><span className="capitalize">{(k.sex ?? "").toLowerCase() || "Sex not given"}</span>{k.dob ? ` · ${fmtShort(k.dob)}` : ""} · not in this herd</div>
+                        <div className="truncate text-xs text-muted-foreground"><span className="capitalize">{(k.sex ?? "").toLowerCase() || "Sex not given"}</span>{k.dob ? ` · ${fmtDate(k.dob)}` : ""} · not in this herd</div>
                       </li>
                     ))}
                   </ul>
                 </div>
               )}
-              <p className="text-xs text-muted-foreground">Tap any kid to open their profile. Sold and deceased kids stay listed for your records.</p>
+              {offspring.length > 0 && <p className="text-xs text-muted-foreground">Tap any kid to open their profile. Sold and deceased kids stay listed for your records.</p>}
             </div>
           )}
         </TabsContent>
