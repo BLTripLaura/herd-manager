@@ -594,3 +594,14 @@ export function calfProKids(animals: Animal[], care: Care[], treatments: Treatme
 export function doseOfText(k: { doseNo?: number | null; doseTotal?: number | null }) {
   return k.doseTotal ? `dose ${k.doseNo} of ${k.doseTotal}` : `dose ${k.doseNo}, until resolved`;
 }
+
+/** ADGA registration "PB1652357" / "D2126253" → ADGA Genetics pedigree link (same rule as the EasyKeeper import) */
+export function adgaUrl(reg?: string | null): string | null {
+  const s = String(reg ?? "").toUpperCase().replace(/\s+/g, "");
+  let m = s.match(/^([A-Z])(\d{9})$/);
+  if (m) return `https://genetics.adga.org/PedigreePrint.aspx?RegNumber=${m[1]}${m[2]}`;
+  m = s.match(/^[A-Z]{0,2}?([A-Z])(\d{4,8})$/);
+  return m ? `https://genetics.adga.org/PedigreePrint.aspx?RegNumber=${m[1]}${m[2].padStart(9, "0")}` : null;
+}
+/** The goat's own pedigree link, or one made from its ADGA reg # */
+export const pedigreeLinkOf = (a: { pedigreeUrl?: string | null; regNumber?: string | null }) => a.pedigreeUrl || adgaUrl(a.regNumber);

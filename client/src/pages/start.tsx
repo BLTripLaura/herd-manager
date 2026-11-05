@@ -6,6 +6,9 @@ import { EasyKeeperImport, ReaderBookmark, CopyReaderButton, bookmarkletCode } f
 import { useHerdInfo } from "@/components/herd-switcher";
 import { useList } from "@/lib/herd";
 import { Button } from "@/components/ui/button";
+import { ScanPapersButton } from "@/components/papers";
+import { API_BASE } from "@/lib/herd";
+import { FileSpreadsheet, ScanLine, DatabaseBackup } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 function Step({ n, icon, title, children }: { n: number; icon: ReactNode; title: string; children: ReactNode }) {
@@ -52,7 +55,8 @@ export default function StartPage() {
             <li className="flex gap-2"><CheckCircle2 className="h-4 w-4 shrink-0 text-primary" /><span>Put in your farm name and add logins for anyone who helps — <Link href="/data" className="font-medium text-primary underline">Import &amp; export</Link>.</span></li>
             <li className="flex gap-2"><CheckCircle2 className={`h-4 w-4 shrink-0 ${herd?.active === "demo" ? "text-amber-600" : "text-primary"}`} /><span>{herd?.active === "demo" ? <b>You're looking at the demo herd. Switch to your own herd before importing.</b> : "You're on your own herd (not the demo)."}</span></li>
             <li className="flex gap-2"><CheckCircle2 className="h-4 w-4 shrink-0 text-primary" /><span>Look through <Link href="/meds" className="font-medium text-primary underline">Medications</Link>. Medicines named the same as in EasyKeeper get linked to your treatment history (and their withdrawal times are used). You can rename or add medicines first.</span></li>
-            <li className="flex gap-2"><CheckCircle2 className="h-4 w-4 shrink-0 text-primary" /><span>Bring your goats over — from EasyKeeper below (everything), from a spreadsheet on <Link href="/data" className="font-medium text-primary underline">Import &amp; export</Link>, or one at a time from registration papers. {goats ? `You have ${goats} goats in Herd Manager now.` : ""}</span></li>
+            <li className="flex gap-2"><CheckCircle2 className="h-4 w-4 shrink-0 text-primary" /><span>Bring your goats over — from EasyKeeper below (everything), from a spreadsheet, or one at a time from a photo of the registration papers. {goats ? `You have ${goats} goats in Herd Manager now.` : ""}</span></li>
+            <li className="flex gap-2"><CheckCircle2 className="h-4 w-4 shrink-0 text-primary" /><span>Backups run on their own. Once a month, download an Excel copy to keep outside the app (see <a href="#backups" className="font-medium text-primary underline">Backups</a> below).</span></li>
           </ul>
         </section>
 
@@ -97,6 +101,54 @@ export default function StartPage() {
           <Step n={6} icon={<ShieldCheck className="h-4 w-4 text-primary" />} title="Check a few goats">
             <p>Open a doe you know well: Profile (reg #, tattoos, the <b>Pedigree</b> link to the ADGA record), <b>Progeny</b> tab, <b>Treatments</b>, <b>Care</b>, <b>Breeding</b>, <b>Notes</b> and Photos. Look at <Link href="/" className="font-medium text-primary underline">Today</Link> for the reminders that came over. Keep your EasyKeeper subscription until you're happy everything is here.</p>
           </Step>
+        </section>
+
+
+        <section className="space-y-3 rounded-lg border bg-card p-4" data-testid="card-start-spreadsheet">
+          <h2 className="flex items-center gap-2 text-base font-bold"><FileSpreadsheet className="h-4 w-4 text-primary" />Import from a spreadsheet</h2>
+          <p className="text-sm text-muted-foreground">Have your goats in Excel, Google Sheets or another program? Save the sheet as <b>.xlsx</b> or <b>.csv</b> with one goat per row and the column headings in the first row. On <Link href="/data" className="font-medium text-primary underline">Import &amp; export</Link>, use <b>Import goats from a spreadsheet</b>: choose the file, check how each column was matched, and import. You can also download a ready-made template there.</p>
+          <div className="text-sm">
+            <div className="mb-1 font-semibold">Suggested column headings (only <b>Name</b> is required; leave out any you don't use)</div>
+            <div className="flex flex-wrap gap-1.5" data-testid="list-sheet-columns">
+              {["Name", "Barn name", "Tag", "Reg #", "Sex", "Date of birth", "Breed", "Herdbook", "Ear type", "Color", "Eye color", "Horn status", "Tattoo location", "Tattoo right", "Tattoo left", "Microchip location", "Microchip", "Pasture", "Sire", "Dam", "In milk", "Status", "Pedigree link", "Notes"].map((c) => <span key={c} className="rounded border bg-muted/50 px-2 py-0.5 text-xs font-medium">{c}</span>)}
+            </div>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">
+              <li><b>Sex:</b> Doe, Buck or Wether. <b>Status:</b> Active, Sold or Deceased (blank means Active). <b>In milk:</b> Yes or No.</li>
+              <li><b>Tattoo location:</b> Ear or Tail. <b>Horn status:</b> Disbudded, Horned, Polled or Scurs. <b>Ear type:</b> Erect, Elf, Gopher or LaMancha-style as you write it.</li>
+              <li><b>Pedigree link:</b> paste the goat's ADGA Genetics web address if you have it; otherwise the app makes the ADGA link from an ADGA Reg # for you.</li>
+              <li><b>Dates:</b> 3/12/2025 or 2025-03-12 both work.</li>
+              <li><b>Sire and Dam:</b> type the parent's name. If that parent is in the same sheet or already in the app, they're linked, so kids show on the parent's Progeny tab.</li>
+              <li>Other headings (like "Registration number" or "DOB") are usually recognized too, and you can match any column by hand before importing. A goat that's already in the app (same reg # or name) is updated instead of doubled.</li>
+              <li>A spreadsheet brings in the goats themselves. Treatment history and notes come over with the EasyKeeper import, or can be added in the app.</li>
+            </ul>
+          </div>
+        </section>
+
+        <section className="space-y-3 rounded-lg border bg-card p-4" data-testid="card-start-scan">
+          <h2 className="flex items-center gap-2 text-base font-bold"><ScanLine className="h-4 w-4 text-primary" />Add a goat from a photo or scan of the registration papers</h2>
+          <p className="text-sm text-muted-foreground">Take a clear, flat photo of the certificate (front, and back if there's anything on it) or use a scanned PDF or picture. <b>Scan registration papers</b> reads the name, reg #, breed, birth date, tattoos, sire, dam and grandparents, shows you everything to check, then saves a new goat (or fills in one that's already here) and keeps the paper photo on file. It's on the <Link href="/herd" className="font-medium text-primary underline">Herd</Link> page, on Import &amp; export, and on each goat's profile.</p>
+          <div className="flex flex-wrap items-center gap-2"><ScanPapersButton /></div>
+          <details className="rounded-md border p-3 text-sm">
+            <summary className="cursor-pointer font-medium">Turning paper reading on (one-time, owner)</summary>
+            <p className="mt-2 text-muted-foreground">Reading papers uses Anthropic's Claude AI, which charges a few cents per paper, so it's off until you add your own key:</p>
+            <ol className="mt-1 list-decimal space-y-1 pl-5 text-muted-foreground">
+              <li>Go to <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline">console.anthropic.com</a>, sign up, and under <b>Billing</b> add a card and a small credit (for example $5).</li>
+              <li>Under <b>API keys</b>, click <b>Create key</b> and copy it (it starts with <code>sk-ant-</code>).</li>
+              <li>In <a href="https://vercel.com/dashboard" target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline">Vercel</a>, open your herd project → <b>Settings</b> → <b>Environment Variables</b>. Add <code>ANTHROPIC_API_KEY</code> with the key as its value and save.</li>
+              <li>Open <b>Deployments</b>, click the three dots on the newest one, and click <b>Redeploy</b>. When it's done, Scan registration papers works.</li>
+            </ol>
+          </details>
+        </section>
+
+        <section id="backups" className="space-y-3 rounded-lg border bg-card p-4" data-testid="card-start-backups">
+          <h2 className="flex items-center gap-2 text-base font-bold"><DatabaseBackup className="h-4 w-4 text-primary" />Backups: daily, weekly and monthly</h2>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+            <li><b>Daily (automatic):</b> a full copy of every record is saved every night around 2:00 AM Eastern. Nothing to set up.</li>
+            <li><b>Weekly and monthly (automatic):</b> the app keeps every nightly copy for 30 days, each Sunday's copy for 12 weeks, and the first copy of each month for a year. You'll find them all under <Link href="/data" className="font-medium text-primary underline">Import &amp; export → Backups</Link>, and each one downloads as an Excel file.</li>
+            <li><b>A copy outside the app (monthly, you):</b> those copies live in the app's own database, so keep one somewhere else too. Once a month, Today reminds you; click <b>Download backup</b> and save the Excel file to your computer, Google Drive or OneDrive.</li>
+          </ul>
+          <Button asChild variant="outline" size="sm"><a href={`${API_BASE}/api/backups/excel`} target="_blank" rel="noreferrer" data-testid="link-start-backup"><Download />Download an Excel backup now</a></Button>
+          <p className="text-xs text-muted-foreground">Want the weekly Excel copy emailed or saved to a cloud folder automatically? The <a href="https://github.com/BLTripLaura/herd-manager/blob/main/SETUP.md#optional-have-the-weekly-excel-copy-sent-to-you-automatically" target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline">setup guide</a> has an optional step for that.</p>
         </section>
 
         <section className="rounded-lg border bg-card p-4" data-testid="card-start-map">

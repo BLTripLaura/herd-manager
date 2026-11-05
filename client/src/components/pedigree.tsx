@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { PedigreeLink } from "@/components/forms";
-import { useSave, shortName, type Animal, goatName, regName } from "@/lib/herd";
+import { useSave, shortName, type Animal, goatName, regName, pedigreeLinkOf } from "@/lib/herd";
 import { findParent } from "@shared/breed";
 
 /* Three-generation pedigree laid out like the ADGA pedigree: the goat on the left, sire on top, dam below,
@@ -76,7 +76,7 @@ export function PedigreeChart({ animal, animals }: { animal: Animal; animals: An
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 text-base font-bold"><GitFork className="h-4 w-4 rotate-90 text-primary" />Pedigree</h2>
         <div className="flex items-center gap-3">
-          <PedigreeLink url={animal.pedigreeUrl} />
+          <PedigreeLink url={pedigreeLinkOf(animal)} />
           <Button size="sm" variant="outline" onClick={() => setEditing(true)} data-testid="button-edit-pedigree"><Pencil />Edit</Button>
         </div>
       </div>

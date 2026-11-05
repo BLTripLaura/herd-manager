@@ -66,7 +66,7 @@ export async function scanPapers(images: string[]) {
     return { type: "image", source: { type: "base64", media_type: m[1] === "image/jpg" ? "image/jpeg" : m[1], data: m[2] } };
   });
   content.push({ type: "text", text: images.length > 1 ? PROMPT + "\nThe photos are the front and back of the same certificate." : PROMPT });
-  const msg = await client.messages.create({ model: process.env.SCAN_MODEL || "claude-sonnet-4-5", max_tokens: 3000, messages: [{ role: "user", content }] });
+  const msg = await client.messages.create({ model: process.env.SCAN_MODEL || "claude-sonnet-5-5", max_tokens: 3000, messages: [{ role: "user", content }] });
   const text = msg.content.map((c: any) => (c.type === "text" ? c.text : "")).join("");
   const raw = parseJson(text);
 

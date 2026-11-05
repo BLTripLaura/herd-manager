@@ -1,20 +1,35 @@
 // Nightly herd backups (run by a Vercel scheduled job at about 2:00 AM Eastern): a full copy of every record
-// saved in the database, keeping the last 30. Any copy can be downloaded as an Excel workbook.
+// saved in the database. Kept: every night for 30 days, every Sunday for 12 weeks, and the 1st of each month for 12 months.
+// Any copy can be downloaded as an Excel workbook.
 import { gzipSync, gunzipSync } from "node:zlib";
 import { all, get, run } from "./db";
 import { activeHerd, dumpAll } from "./herds";
 import { settings } from "./storage";
 
-const KEEP = 30;
+const KEEP = 30, KEEP_WEEKS = 12, KEEP_MONTHS = 12;
+const dow = (d: string) => new Date(`${d}T12:00:00Z`).getUTCDay();
+/** daily / weekly (Sunday) / monthly (first copy of each month) */
+export function backupKinds(dates: string[]) {
+  const desc = [...dates].sort().reverse();
+  const monthly = new Set<string>(), seenMonth = new Set<string>();
+  for (const d of [...desc].reverse()) { const m = d.slice(0, 7); if (!seenMonth.has(m)) { seenMonth.add(m); monthly.add(d); } }
+  const weekly = new Set(desc.filter((d) => dow(d) === 0));
+  const keep = new Set<string>(desc.slice(0, KEEP));
+  desc.filter((d) => weekly.has(d)).slice(0, KEEP_WEEKS).forEach((d) => keep.add(d));
+  desc.filter((d) => monthly.has(d)).slice(0, KEEP_MONTHS).forEach((d) => keep.add(d));
+  const kind = (d: string) => (monthly.has(d) ? "monthly" : weekly.has(d) ? "weekly" : "daily");
+  return { keep, kind };
+}
 const TZ = "America/New_York";
 const easternDate = (d = new Date()) => d.toLocaleDateString("en-CA", { timeZone: TZ });
 
 export async function listBackups() {
   const rows = await all("SELECT date, saved_at AS \"savedAt\", goats, bytes FROM backups ORDER BY date DESC");
-  return rows.map((r: any) => ({ name: `goat-joy-herd-${r.date}`, date: r.date, savedAt: new Date(r.savedAt).toISOString(), goats: r.goats, bytes: r.bytes }));
+  const { kind } = backupKinds(rows.map((r: any) => r.date));
+  return rows.map((r: any) => ({ name: `herd-backup-${r.date}`, date: r.date, kind: kind(r.date), savedAt: new Date(r.savedAt).toISOString(), goats: r.goats, bytes: r.bytes }));
 }
 
-/** Save today's copy (replaces an earlier copy from the same day), then keep only the newest 30.
+/** Save today's copy (replaces an earlier copy from the same day), then thin out old copies (30 nightly, 12 Sundays, 12 monthly).
     While the demo herd is open, the copy is taken from the saved "My herd" instead. */
 export async function runBackup() {
   const date = easternDate();
@@ -27,7 +42,9 @@ export async function runBackup() {
   const packed = gzipSync(Buffer.from(JSON.stringify(data)));
   await run("INSERT INTO backups (date, saved_at, goats, bytes, data) VALUES (?, now(), ?, ?, ?) ON CONFLICT(date) DO UPDATE SET saved_at = now(), goats = excluded.goats, bytes = excluded.bytes, data = excluded.data",
     date, (data.animals ?? []).length, packed.length, packed);
-  await run(`DELETE FROM backups WHERE date NOT IN (SELECT date FROM backups ORDER BY date DESC LIMIT ${KEEP})`);
+  const dates = (await all("SELECT date FROM backups")).map((r: any) => r.date as string);
+  const { keep } = backupKinds(dates);
+  for (const d of dates) if (!keep.has(d)) await run("DELETE FROM backups WHERE date = ?", d);
   return date;
 }
 

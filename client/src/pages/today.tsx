@@ -22,6 +22,9 @@ import { GiveDoseDialog, DoseMenu } from "@/components/give-dose";
 import { TaskMenu } from "@/components/task-menu";
 import { CalfProSection } from "@/components/calf-pro";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useQuery } from "@tanstack/react-query";
+import { useMe } from "@/components/auth";
+import { API_BASE } from "@/lib/herd";
 
 /** Which care job a to-do is about, e.g. "Hoof trim — milking string" → Hoof trim */
 const careFor = (title: string) => {
@@ -39,6 +42,12 @@ export default function Today() {
   const { layout } = useTodayLayout();
   const wide = useWide();
   const animals = useList("animals");
+  const me = useMe();
+  // Monthly nudge to keep a copy of the herd outside the app (owner only, once there are goats)
+  const backupInfo = useQuery<{ lastSaved?: string | null; backups?: { date: string }[] }>({ queryKey: ["/api/backups"], enabled: me?.role === "owner" });
+  const [backupHidden, setBackupHidden] = useState(() => sessionStorage.getItem("hideBackupNudge") === "1");
+  const backupDue = me?.role === "owner" && !backupHidden && (animals.data ?? []).length > 0 && backupInfo.data != null
+    && (!backupInfo.data.lastSaved || Date.now() - new Date(backupInfo.data.lastSaved).getTime() > 30 * 86400000);
   const { data: treatments = [] } = useList("treatments");
   const { data: breedings = [] } = useList("breedings");
   const { data: meds = [] } = useList("medications");
@@ -230,6 +239,18 @@ export default function Today() {
         <Button variant="ghost" size="sm" onClick={() => setCustomizing(true)} data-testid="button-customize-today"><SlidersHorizontal />Customize</Button>
       </PageHeader>
       <CustomizeTodayDialog open={customizing} onOpenChange={setCustomizing} />
+      {backupDue && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/5 p-4" data-testid="banner-monthly-backup">
+          <div className="min-w-0 flex-1 basis-64">
+            <h2 className="text-sm font-bold">Time to save this month's backup</h2>
+            <p className="text-sm text-muted-foreground">The app saves a copy every night, but keep one outside it too. Download the Excel backup and put it on your computer, Google Drive or OneDrive.</p>
+          </div>
+          <div className="flex gap-2">
+            <Button asChild size="sm"><a href={`${API_BASE}/api/backups/excel`} target="_blank" rel="noreferrer" data-testid="link-monthly-backup" onClick={() => setTimeout(() => backupInfo.refetch(), 4000)}>Download backup</a></Button>
+            <Button size="sm" variant="ghost" data-testid="button-hide-backup-nudge" onClick={() => { sessionStorage.setItem("hideBackupNudge", "1"); setBackupHidden(true); }}>Later</Button>
+          </div>
+        </div>
+      )}
       {(animals.data ?? []).length === 0 && (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/40 bg-primary/5 p-4" data-testid="banner-getting-started">
           <div className="min-w-0 flex-1 basis-64">

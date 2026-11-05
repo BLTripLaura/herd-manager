@@ -42,22 +42,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ saved: await runBackup() });
   });
   // Backups: nightly copies and a one-file Excel of every record
-  app.get("/api/backups", async (_req, res) => res.json({ backups: await listBackups(), keep: 30, time: "2:00 AM Eastern" }));
+  app.get("/api/backups", async (_req, res) => res.json({ backups: await listBackups(), keep: { daily: 30, weekly: 12, monthly: 12 }, time: "2:00 AM Eastern", lastSaved: (await settings.get("lastExcelSaved")) ?? null, lastAuto: (await settings.get("lastAutoBackup")) ?? null }));
   app.post("/api/backups/run", async (_req, res) => { const name = await runBackup(); res.json({ name, backups: await listBackups() }); });
   const sendXlsx = (res: any, name: string, buf: Buffer) => {
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="${name}.xlsx"`);
     res.send(buf);
   };
-  app.get("/api/backups/excel", async (_req, res) => {
+  // Remember when a person (not the automatic weekly job) last saved an Excel copy off the app, for the monthly reminder
+  const markSaved = async (req: any) => { if (req.user && req.user.email !== "backup") await settings.set("lastExcelSaved", new Date().toISOString()); };
+  app.get("/api/backups/excel", async (req, res) => {
     const d = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-    sendXlsx(res, `goat-joy-herd-backup-${d}`, await backupWorkbook());
+    const buf = await backupWorkbook();
+    if (req.user?.email === "backup") await settings.set("lastAutoBackup", new Date().toISOString()); else await markSaved(req);
+    sendXlsx(res, `herd-backup-${d}`, buf);
   });
   app.get("/api/backups/file/:date", async (req, res) => {
-    const date = String(req.params.date).replace(/^goat-joy-herd-/, "").replace(/\.(db|xlsx)$/, "");
+    const date = String(req.params.date).replace(/^(goat-joy-herd-|herd-backup-)/, "").replace(/\.(db|xlsx)$/, "");
     const data = /^\d{4}-\d{2}-\d{2}$/.test(date) ? await backupData(date) : null;
     if (!data) return res.status(404).send("Not found");
-    sendXlsx(res, `goat-joy-herd-${date}`, await backupWorkbook({ date, data }));
+    await markSaved(req);
+    sendXlsx(res, `herd-backup-${date}`, await backupWorkbook({ date, data }));
   });
 
   // Refresh the demo herd from its saved copy with dates moved up to today (only while the demo is open)
@@ -120,7 +125,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!imgs.length) return res.status(400).json({ message: "Add a photo of the papers first." });
     try { res.json(await scanPapers(imgs)); }
     catch (e: any) {
-      if (e?.noKey) return res.status(503).json({ message: "Reading papers isn't switched on yet (it needs an AI service key). Fill in the details by hand for now." });
+      if (e?.noKey) return res.status(503).json({ message: "Reading papers isn't switched on yet. The owner can turn it on by adding an Anthropic key (see Getting started → Scan registration papers). Fill in the details by hand for now." });
       console.error("scan failed", e?.message);
       res.status(502).json({ message: "The papers couldn't be read. Try a clearer, flat photo in good light, or fill in the details by hand." });
     }
@@ -175,7 +180,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     let body: any;
     try { body = typeof req.body?.payload === "string" ? JSON.parse(req.body.payload) : req.body; } catch { return res.status(400).send("Bad report"); }
     const sheets: { name: string; columns: { label: string; kind: string }[]; rows: any[][] }[] = body?.sheets ?? [];
-    const base = String(body?.filename || "goat-joy-report").replace(/[^\w.-]+/g, "-");
+    const base = String(body?.filename || "herd-report").replace(/[^\w.-]+/g, "-");
     if (!sheets.length) return res.status(400).send("Nothing to export");
     if (body.format === "csv") {
       const esc = (v: any) => { const x = v === null || v === undefined ? "" : String(v); return /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x; };

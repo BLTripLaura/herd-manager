@@ -34,8 +34,8 @@ const FIELDS: Field[] = [
   { key: "barnName", label: "Barn name", names: ["barn name", "barnname", "nickname", "nick name", "call name", "pet name", "barn"] },
   { key: "tag", label: "Herd tag #", names: ["tag", "tag #", "tag number", "id", "ear tag", "scrapie tag", "herd #", "number", "#"] },
   { key: "tattooLocation", label: "Tattoo location", names: ["tattoo location", "tattoo loc", "tattoo place"] },
-  { key: "tattooRight", label: "Tattoo right", names: ["tattoo right", "tattoo (r)", "right tattoo", "right ear", "tattoo r", "r tattoo", "rt tattoo"] },
-  { key: "tattooLeft", label: "Tattoo left", names: ["tattoo left", "tattoo (l)", "left tattoo", "left ear", "tattoo l", "l tattoo", "lt tattoo", "tattoo"] },
+  { key: "tattooRight", label: "Tattoo right", names: ["tattoo right", "tattoo (r)", "right tattoo", "right ear", "tattoo right ear", "right ear tattoo", "tattoo r", "r tattoo", "rt tattoo"] },
+  { key: "tattooLeft", label: "Tattoo left", names: ["tattoo left", "tattoo (l)", "left tattoo", "left ear", "tattoo left ear", "left ear tattoo", "tattoo l", "l tattoo", "lt tattoo", "tattoo"] },
   { key: "microchip", label: "Microchip #", names: ["microchip", "microchip #", "microchip number", "chip", "chip #", "chip number", "rfid", "eid"] },
   { key: "chipLocation", label: "Microchip location", names: ["microchip location", "chip location", "chip loc"] },
   { key: "hornStatus", label: "Horn status", names: ["horn status", "horns", "horned", "disbudded", "polled"] },
@@ -274,12 +274,12 @@ export function ImportAnimals() {
   };
 
   const template = (format: "xlsx" | "csv") => {
-    const cols = ["Name", "Barn name", "Tag", "Reg #", "Sex", "Date of birth", "Breed", "Color", "Eye color", "Horn status", "Tattoo location", "Tattoo right", "Tattoo left", "Microchip location", "Microchip", "Pasture", "Sire", "Dam", "In milk", "Status", "Pedigree link", "Notes"];
+    const cols = ["Name", "Barn name", "Tag", "Reg #", "Sex", "Date of birth", "Breed", "Herdbook", "Ear type", "Color", "Eye color", "Horn status", "Tattoo location", "Tattoo right", "Tattoo left", "Microchip location", "Microchip", "Pasture", "Sire", "Dam", "In milk", "Status", "Pedigree link", "Notes"];
     const payload = {
-      format, filename: "goat-joy-herd-import-template",
+      format, filename: "herd-import-template",
       sheets: [{ name: "Herd", columns: cols.map((label) => ({ label, kind: label === "Date of birth" ? "date" : "text" })), rows: [
-        ["Sunny Acres Night Owl", "Owlie", "109", "D2300001", "Doe", "2025-03-12", "Oberhasli", "Chamoisee", "Brown", "Disbudded", "Ear", "GJY", "S3", "Base of ear", "985112001234567", "Front Pasture", "Goat Joy Onyx", "Goat Joy Licorice", "Yes", "Active", "", ""],
-        ["Sunny Acres Thunder", "Boomer", "205", "", "Buck", "2024-04-02", "Oberhasli", "Black", "Brown", "Polled", "Tail", "GJY", "R1", "Tail", "", "Buck Pen", "", "", "No", "Active", "", "Herd sire"],
+        ["Sunny Acres Night Owl", "Owlie", "109", "D2300001", "Doe", "2025-03-12", "Oberhasli", "Purebred", "Erect", "Chamoisee", "Brown", "Disbudded", "Ear", "SAF", "S3", "Base of ear", "985112001234567", "Front Pasture", "Sunny Acres Onyx", "Sunny Acres Licorice", "Yes", "Active", "", ""],
+        ["Sunny Acres Thunder", "Boomer", "205", "", "Buck", "2024-04-02", "Oberhasli", "American", "Erect", "Black", "Brown", "Polled", "Tail", "SAF", "R1", "Tail", "", "Buck Pen", "", "", "No", "Active", "", "Herd sire"],
       ] }],
     };
     const form = document.createElement("form");

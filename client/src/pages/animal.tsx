@@ -23,7 +23,7 @@ import { TaskMenu } from "@/components/task-menu";
 import { PedigreeChart } from "@/components/pedigree";
 import { RegistrationPapers } from "@/components/papers";
 import { MilkBadge, MilkStatusDialog, LactationList } from "@/components/milk-status";
-import { isCalfPro, useList, useSave, useRemove, post, type Task, type Treatment, latestWeight, activeHolds, age, fmtDate, fmtShort, today, relDays, shortName, fmtChip, HORN_LABEL, progenyOf, findByName, normName, daysBetween, heatWatch, heatDates, heatInterval, HEAT_TYPICAL, type Breeding, type Animal, type Heat, usDue, prekidDue, daysInMilk , nextDoses, doseLate, fmtTime, goatName, regName, doseText, everyText, taskDoseText, doseOfText } from "@/lib/herd";
+import { isCalfPro, useList, useSave, useRemove, post, type Task, type Treatment, latestWeight, activeHolds, age, fmtDate, fmtShort, today, relDays, shortName, fmtChip, HORN_LABEL, progenyOf, pedigreeLinkOf, findByName, normName, daysBetween, heatWatch, heatDates, heatInterval, HEAT_TYPICAL, type Breeding, type Animal, type Heat, usDue, prekidDue, daysInMilk , nextDoses, doseLate, fmtTime, goatName, regName, doseText, everyText, taskDoseText, doseOfText } from "@/lib/herd";
 
 function Info({ label, value }: { label: string; value: React.ReactNode }) {
   return <div><div className="text-xs text-muted-foreground">{label}</div><div className="break-words text-sm font-medium">{value || "—"}</div></div>;
@@ -168,7 +168,7 @@ export default function AnimalPage() {
                 options={[...pastures.map((p) => ({ value: String(p.id), label: p.name })), { value: "none", label: "Unassigned" }]} />
             </div>
           </div>
-          <Info label="ADGA reg #" value={<>{a.regNumber || "—"}{a.pedigreeUrl && <div><PedigreeLink url={a.pedigreeUrl} /></div>}</>} />
+          <Info label="ADGA reg #" value={<>{a.regNumber || "—"}{pedigreeLinkOf(a) && <div><PedigreeLink url={pedigreeLinkOf(a)} /></div>}</>} />
           <Info label="Born" value={a.dob ? `${fmtDate(a.dob)} · ${age(a.dob)}` : null} />
           <Info label="Latest weight" value={lw ? `${lw.lbs} lb · ${fmtShort(lw.date)}` : null} />
           <Info label="Breed" value={a.breed} />
