@@ -1,6 +1,6 @@
 # Herd Manager: set up your own copy
 
-> © 2026 Laura Ritter. This app was developed by Laura Ritter All Rights Reserved. Distribution or copying of any or all of the product is strictly prohibited.
+> © 2026 Laura Ritter. This app was developed by Laura Ritter All Rights Reserved. Distribution or copying of any or all of the product is strictly prohibited without express written permission from Laura Ritter.
 
 This gives you your own private goat herd app. Your records live in your own free accounts. Nobody else, including the person who shared it, can see them.
 
