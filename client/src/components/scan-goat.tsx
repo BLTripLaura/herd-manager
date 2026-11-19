@@ -7,26 +7,23 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useList, fmtChip, goatName, type Animal } from "@/lib/herd";
 import { useApp } from "@/components/shell";
 import { useToast } from "@/hooks/use-toast";
+import { chipCandidates, chipComplete, chipCompact, chipHasLetters } from "@/lib/chip-decode";
 
 /* Scan a goat: a Bluetooth microchip reader in keyboard (HID) mode "types" the chip number and presses Enter.
    - The Scan button opens a box that waits for the reader (or a typed number) and opens the goat's page.
    - A scan made while no text box is in use is also picked up on any page (fast keystrokes only, so normal typing is never taken).
    - A scan into a text box (a goat form's microchip field, the search box) goes into that box as usual.
+   The reader may be set to decimal or hex output; hex is converted to the 15-digit number first.
    Matching is exact on the stored 15-digit microchip, never a partial number or a name. */
 
 /** Digits only: spaces, dots, dashes and other separators the reader adds are dropped */
 export const chipDigits = (raw: string) => raw.replace(/\D/g, "");
-const looksHex = (raw: string) => /[a-f]/i.test(raw.replace(/[^0-9a-z]/gi, "")) && /^[0-9a-f\s.:_-]+$/i.test(raw.trim());
 
-/** Goats whose stored microchip is exactly this number */
+/** Goats whose stored microchip exactly equals one of the numbers the reader's output can mean (decimal or hex) */
 export function goatsByChip(animals: Animal[], raw: string): Animal[] {
-  const d = chipDigits(raw);
-  if (d.length < 9) return [];
-  const exact = animals.filter((a) => a.microchip && chipDigits(a.microchip) === d);
-  if (exact.length || d.length <= 15) return exact;
-  // Some readers put an extra flag digit in front: try the last 15
-  const tail = d.slice(-15);
-  return animals.filter((a) => a.microchip && chipDigits(a.microchip) === tail);
+  const want = new Set(chipCandidates(raw).map((c) => c.chip));
+  if (!want.size) return [];
+  return animals.filter((a) => a.microchip && want.has(chipDigits(a.microchip)));
 }
 
 type Result = { kind: "none"; raw: string } | { kind: "many"; raw: string; goats: Animal[] } | null;
@@ -64,7 +61,7 @@ export function ScanGoat() {
 
   /** Look up a scanned or typed number. Returns true when it was handled. */
   const lookUp = useCallback((raw: string, fromReader: boolean) => {
-    const d = chipDigits(raw);
+    const d = chipCompact(raw);
     if (!raw.trim()) return false;
     // The same chip read twice in a row (reader held over the goat) does not keep reopening the page
     const now = Date.now();
@@ -82,7 +79,7 @@ export function ScanGoat() {
     let buf = "", lastKey = 0, fast = true, idle: number | undefined;
     const reset = () => { buf = ""; fast = true; window.clearTimeout(idle); };
     const finish = () => {
-      const raw = buf; const ok = fast && chipDigits(raw).length >= 9; reset();
+      const raw = buf; const ok = fast && chipComplete(raw); reset();
       return ok ? lookUp(raw, true) : false;
     };
     const onKey = (e: KeyboardEvent) => {
@@ -97,18 +94,20 @@ export function ScanGoat() {
       if (!buf || now - lastKey > 80) { buf = ""; fast = true; } // a pause starts a new read
       buf += e.key; lastKey = now;
       if (buf.length > 40) fast = false;
-      // Readers set to send no Enter: a quick burst of 15+ digits followed by a pause counts as a scan
+      // Readers set to send no Enter: a quick burst of a whole chip code (decimal or hex) followed by a pause counts as a scan
       window.clearTimeout(idle);
-      idle = window.setTimeout(() => { if (chipDigits(buf).length >= 15) finish(); else reset(); }, 200);
+      idle = window.setTimeout(() => { if (chipComplete(buf)) finish(); else reset(); }, 200);
     };
     window.addEventListener("keydown", onKey);
     return () => { window.removeEventListener("keydown", onKey); window.clearTimeout(idle); };
   }, [open, lookUp]);
 
-  // Inside the Scan box: readers that don't press Enter are looked up once 15 digits have arrived
+  // Inside the Scan box: readers that don't press Enter are looked up once a whole code has arrived
+  // (15 digits, or a hex code with letters). Typed hex without letters waits for Enter.
   useEffect(() => {
     window.clearTimeout(autoTimer.current);
-    if (open && chipDigits(typed).length >= 15) autoTimer.current = window.setTimeout(() => lookUp(typed, true), 250);
+    const c = chipCompact(typed);
+    if (open && chipComplete(typed) && (/^\d+$/.test(c) || chipHasLetters(c))) autoTimer.current = window.setTimeout(() => lookUp(typed, true), 300);
     return () => window.clearTimeout(autoTimer.current);
   }, [typed, open, lookUp]);
 
@@ -116,7 +115,9 @@ export function ScanGoat() {
   const again = () => { setResult(null); setTyped(""); last.current = { chip: "", at: 0 }; setTimeout(() => inputRef.current?.focus(), 0); };
   const close = (v: boolean) => { setOpen(v); if (!v) { setResult(null); setTyped(""); } };
   const raw = result?.raw ?? "";
-  const shownChip = chipDigits(raw).length === 15 ? fmtChip(chipDigits(raw)) : raw.trim();
+  const cands = chipCandidates(raw);
+  const hexCands = cands.filter((c) => c.how === "hex");
+  const shownChip = cands.length === 1 ? fmtChip(cands[0].chip) : raw.trim();
 
   return (
     <>
@@ -134,21 +135,26 @@ export function ScanGoat() {
             <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/40" data-testid="scan-not-found">
               <div className="flex items-center gap-2 font-semibold"><SearchX className="h-4 w-4" />No goat has this chip</div>
               <div className="mt-1 font-mono tabular-nums" data-testid="text-scan-chip">{shownChip}</div>
+              {hexCands.length > 0 && (
+                <div className="mt-1 text-xs text-muted-foreground" data-testid="text-scan-hex">
+                  Reader sent hex {raw.trim()}{hexCands.length === 1 ? ` = ${fmtChip(hexCands[0].chip)}` : ` (checked ${hexCands.length} ways of reading it)`}
+                </div>
+              )}
               <p className="mt-1 text-xs text-muted-foreground">
-                {looksHex(raw) ? "This looks like a hex number. Set the reader to decimal output, then scan again."
-                  : chipDigits(raw).length !== 15 ? `It has ${chipDigits(raw).length} digits. Goat chips stored here are 15 digits.`
+                {!cands.length ? (chipHasLetters(raw) ? "This isn't a microchip number the app recognizes. Try the reader's decimal setting."
+                  : `It has ${chipCompact(raw).length} digits. Goat chips stored here are 15 digits.`)
                   : "Check the number against the goat's papers. To add it, open the goat and use Edit."}
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
                 <Button size="sm" onClick={again} data-testid="button-scan-again">Scan again</Button>
-                <Button size="sm" variant="outline" onClick={() => { setHerdQ(chipDigits(raw).slice(-6) || raw.trim()); close(false); nav("/herd"); }} data-testid="button-scan-search">Search the herd</Button>
+                <Button size="sm" variant="outline" onClick={() => { setHerdQ((cands[0]?.chip ?? chipDigits(raw)).slice(-6) || raw.trim()); close(false); nav("/herd"); }} data-testid="button-scan-search">Search the herd</Button>
               </div>
             </div>
           )}
 
           {result?.kind === "many" && (
             <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/40" data-testid="scan-duplicates">
-              <div className="flex items-center gap-2 font-semibold"><TriangleAlert className="h-4 w-4" />{result.goats.length} goats have this chip</div>
+              <div className="flex items-center gap-2 font-semibold"><TriangleAlert className="h-4 w-4" />{result.goats.length} goats match this chip</div>
               <div className="mt-1 font-mono tabular-nums">{shownChip}</div>
               <p className="mt-1 text-xs text-muted-foreground">A chip should belong to one goat. Pick the goat in front of you, then fix the other record.</p>
               <ul className="mt-2 divide-y rounded-md border bg-card">
@@ -175,7 +181,7 @@ export function ScanGoat() {
           )}
 
           <p className="text-xs text-muted-foreground">
-            Pair the reader in Bluetooth settings as a keyboard (HID). You can also scan without opening this box, from any page, as long as you aren't typing in a box.
+            Pair the reader in Bluetooth settings as a keyboard (HID). Decimal and hex settings both work. You can also scan without opening this box, from any page, as long as you aren't typing in a box.
           </p>
         </DialogContent>
       </Dialog>
