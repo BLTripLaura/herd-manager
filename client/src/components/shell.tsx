@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { QuickSearch } from "@/components/quick-search";
+import { ScanGoat } from "@/components/scan-goat";
 import { AccountBox, useMe } from "@/components/auth";
 
 /* ---------- shared app state: theme + batch selection ---------- */
@@ -145,7 +146,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <div className="sticky top-[49px] z-20 border-b bg-background/95 backdrop-blur md:top-0 print:hidden">
           <UpdateBanner />
           <DemoBanner />
-          <div className="mx-auto max-w-6xl px-4 py-2 md:px-8 md:py-3"><QuickSearch /></div>
+          <div className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-2 md:px-8 md:py-3"><div className="min-w-0 flex-1"><QuickSearch /></div><ScanGoat /></div>
         </div>
         <div className="mx-auto max-w-6xl px-4 py-5 md:px-8 md:py-6">{children}</div>
         <footer className="mx-auto max-w-6xl px-4 pb-4 md:px-8"><Copyright className="border-t pt-4" /></footer>
