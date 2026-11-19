@@ -121,7 +121,7 @@ export function ScanGoat() {
 
   return (
     <>
-      <Button variant="outline" onClick={start} className="h-10 shrink-0 gap-1.5 bg-card px-3" aria-label="Scan a goat's microchip" data-testid="button-scan-goat">
+      <Button onClick={start} className="h-10 shrink-0 gap-1.5 px-3.5 font-bold tracking-[.01em] shadow-[0_2px_6px_hsl(var(--primary)/.35)]" aria-label="Scan a goat's microchip" data-testid="button-scan-goat">
         <ScanLine className="h-4 w-4" /><span className="hidden sm:inline">Scan a goat</span><span className="sm:hidden">Scan</span>
       </Button>
       <Dialog open={open} onOpenChange={close}>
